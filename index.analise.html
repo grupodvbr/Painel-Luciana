@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Painel de Receitas & Lucratividade</title>
+<style>
+  :root{
+    --bg:#0f0f10; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --muted:#cfcfcf;
+    --brand:#2563eb; --ghost:#374151; --accent:#b75507; --good:#16a34a; --bad:#b91c1c;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px}
+  h1{margin:0 0 8px}
+  .muted{color:#cfcfcf}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin:12px 0;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,button{border-radius:10px;border:1px solid #333;background:#0f0f10;color:#fff;padding:10px}
+  button.btn{background:var(--brand);border:0;cursor:pointer}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid var(--line);padding:8px}
+  th{background:#000}
+  .right{text-align:right}
+  .badge{border:1px solid #374151;border-radius:999px;padding:2px 6px;font-size:.75rem}
+  .pill{padding:4px 8px;border-radius:999px;border:1px solid #374151;font-size:.8rem;background:#111}
+  .ok{color:var(--good)} .bad{color:var(--bad)}
+  .mini{padding:6px 10px}
+  .table-wrap{overflow:auto}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .kpi .card{margin:0}
+  @media (max-width: 900px){
+    .kpi{grid-template-columns:1fr 1fr}
+  }
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+  .modal .box{width:100%;max-width:720px;background:#121212;border:1px solid var(--line);border-radius:14px;padding:16px}
+</style>
+</head>
+<body>
+  <h1>Painel de Receitas & Lucratividade</h1>
+  <div class="muted">Acompanhe custos, preços e margens. Edite o preço de venda diretamente na tabela.</div>
+
+  <div class="card toolbar">
+    <input id="busca" placeholder="Buscar por item ou classificação..." style="flex:1">
+    <select id="filtroUM">
+      <option value="">U.M. do rendimento (todas)</option>
+      <option value="kg">kg/L (g,kg,ml,l)</option>
+      <option value="un">un</option>
+    </select>
+    <select id="filtroClass"></select>
+    <button class="btn mini" id="recarregar">Recarregar</button>
+  </div>
+
+  <div class="kpi">
+    <div class="card"><div class="muted">Produtos</div><div id="kpiProdutos" style="font-size:1.6rem;font-weight:bold">—</div></div>
+    <div class="card"><div class="muted">Custo médio unitário</div><div id="kpiCustoMedio" style="font-size:1.6rem;font-weight:bold">—</div></div>
+    <div class="card"><div class="muted">Preço médio</div><div id="kpiPrecoMedio" style="font-size:1.6rem;font-weight:bold">—</div></div>
+    <div class="card"><div class="muted">Margem média</div><div id="kpiMargemMedia" style="font-size:1.6rem;font-weight:bold">—</div></div>
+  </div>
+
+  <div class="card table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Classificação</th>
+          <th>Rendimento</th>
+          <th>U.M.</th>
+          <th class="right">Custo Receita</th>
+          <th class="right">Custo Unit. (kg/L ou un)</th>
+          <th class="right">Preço Venda (R$)</th>
+          <th class="right">Margem</th>
+          <th class="right">Sugestão (+30%)</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Modal Receita Detalhada -->
+  <div class="modal" id="modal">
+    <div class="box">
+      <h3 id="modalTitle">Receita</h3>
+      <div class="muted" id="modalResumo"></div>
+      <div class="table-wrap" style="margin-top:10px">
+        <table id="tblRec">
+          <thead>
+            <tr>
+              <th>Item</th><th class="right">Qtd</th><th>U.M.</th><th class="right">Custo Unit.</th><th class="right">Subtotal</th><th class="right">% no Custo</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="text-align:right;margin-top:12px">
+        <button class="mini" onclick="closeModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0VZDYYK6bU6b7AFBgHLITvoOVrhPYHNeZhVkkssZPfvQ-t8Tti9J1x2DChAk_fuXi/exec';
+
+let DATA = [];
+
+const tbody = document.querySelector('#tbl tbody');
+const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fmtPct = v => isFinite(v) ? (v*100).toFixed(1).replace('.',',')+'%' : '—';
+
+function toast(m){
+  let t = document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast';
+  Object.assign(t.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',background:'#111',border:'1px solid #333',padding:'8px 12px',borderRadius:'10px',zIndex:99});
+  document.body.appendChild(t); }
+  t.textContent=m; t.style.opacity=1; clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity=0,1600);
+}
+
+async function fetchProdutos(){
+  const url = WEBAPP_URL + '?action=produtos&ts=' + Date.now();
+  const r = await fetch(url, { cache:'no-store' });
+  const j = await r.json();
+  if(!j.ok){ toast('Erro ao carregar produtos'); console.warn(j.error); return []; }
+  return j.data || [];
+}
+
+function renderClassFilter(){
+  const sel = document.getElementById('filtroClass');
+  const classes = Array.from(new Set(DATA.map(d=>d.classificacao).filter(Boolean))).sort();
+  sel.innerHTML = '<option value="">Classificação (todas)</option>' + classes.map(c=>`<option>${c}</option>`).join('');
+}
+
+function filtrar(){
+  const q = (document.getElementById('busca').value||'').toLowerCase();
+  const fUM = document.getElementById('filtroUM').value;
+  const fC  = document.getElementById('filtroClass').value;
+
+  return DATA.filter(d=>{
+    const hitQ = (d.item||'').toLowerCase().includes(q) || (d.classificacao||'').toLowerCase().includes(q);
+    const hitUM = !fUM || (fUM==='un' ? d.unidadeRend==='un' : (d.unidadeRend!=='un')); // kg/L vs un
+    const hitC = !fC || d.classificacao===fC;
+    return hitQ && hitUM && hitC;
+  });
+}
+
+function custoUnitarioBase(d){
+  if(['g','kg','ml','l'].includes(d.unidadeRend)) return d.custoPorKgOuL;
+  if(d.unidadeRend==='un' && d.rendimento>0) return d.custoReceita / d.rendimento;
+  return 0;
+}
+
+function renderTabela(){
+  const arr = filtrar();
+  tbody.innerHTML = arr.map(d=>{
+    const cUnit = custoUnitarioBase(d);
+    const margemTxt = d.precoVenda>0 && cUnit>0 ? fmtPct((d.precoVenda - cUnit)/d.precoVenda) : '—';
+    const margemCls = (d.precoVenda>0 && cUnit>0 && (d.precoVenda - cUnit)/d.precoVenda >= 0.3) ? 'ok' : 'bad';
+
+    const umLabel = d.unidadeRend==='un' ? 'un' : 'kg/L';
+
+    return `
+      <tr data-id="${d.id}">
+        <td>${d.item||''}<div class="muted" style="font-size:.8rem">${d.codigoSistema||''}</div></td>
+        <td>${d.classificacao||''}</td>
+        <td class="right">${d.rendimento||0}</td>
+        <td><span class="badge">${d.unidadeRend||''}</span></td>
+        <td class="right">${fmtBRL(d.custoReceita||0)}</td>
+        <td class="right" title="Base: ${umLabel}">${fmtBRL(cUnit||0)}</td>
+        <td class="right">
+          <input class="preco" type="number" step="0.0001" value="${d.precoVenda||''}" style="width:120px;text-align:right">
+        </td>
+        <td class="right ${d.precoVenda?margemCls:''}">${margemTxt}</td>
+        <td class="right">${d.precoSugerido?fmtBRL(d.precoSugerido):'—'}</td>
+        <td>
+          <button class="mini ver">Ver receita</button>
+          <button class="mini salvar">Salvar preço</button>
+        </td>
+      </tr>
+    `;
+  }).join('') || `<tr><td colspan="10" class="muted">Nada encontrado.</td></tr>`;
+
+  // bind botões
+  [...tbody.querySelectorAll('tr')].forEach(tr=>{
+    const id = Number(tr.dataset.id);
+    tr.querySelector('.ver').addEventListener('click', ()=>openModalReceita(id));
+    tr.querySelector('.salvar').addEventListener('click', ()=>salvarPrecoLinha(tr, id));
+    tr.querySelector('.preco').addEventListener('input', ()=> atualizarKPIs());
+  });
+
+  atualizarKPIs();
+}
+
+function atualizarKPIs(){
+  const arr = filtrar();
+  const n = arr.length;
+  document.getElementById('kpiProdutos').textContent = n;
+
+  if(!n){
+    document.getElementById('kpiCustoMedio').textContent = '—';
+    document.getElementById('kpiPrecoMedio').textContent = '—';
+    document.getElementById('kpiMargemMedia').textContent = '—';
+    return;
+  }
+  const custos = arr.map(custoUnitarioBase).filter(v=>v>0);
+  const precos = arr.map(d=>{
+    const tr = tbody.querySelector(`tr[data-id="${d.id}"]`);
+    const v = tr ? Number(tr.querySelector('.preco').value||0) : Number(d.precoVenda||0);
+    return v||0;
+  }).filter(v=>v>0);
+
+  const media = a => a.length ? a.reduce((s,v)=>s+v,0)/a.length : 0;
+  const mCusto = media(custos);
+  const mPreco = media(precos);
+  let mMargem = 0;
+  const ms = [];
+  arr.forEach(d=>{
+    const c = custoUnitarioBase(d);
+    const tr = tbody.querySelector(`tr[data-id="${d.id}"]`);
+    const p = tr ? Number(tr.querySelector('.preco').value||0) : Number(d.precoVenda||0);
+    if(c>0 && p>0) ms.push((p-c)/p);
+  });
+  mMargem = media(ms);
+
+  document.getElementById('kpiCustoMedio').textContent = mCusto?fmtBRL(mCusto):'—';
+  document.getElementById('kpiPrecoMedio').textContent = mPreco?fmtBRL(mPreco):'—';
+  document.getElementById('kpiMargemMedia').textContent = ms.length?fmtPct(mMargem):'—';
+}
+
+async function salvarPrecoLinha(tr, id){
+  const inp = tr.querySelector('.preco');
+  const valor = Number(inp.value||0);
+  try{
+    const r = await fetch(WEBAPP_URL, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify({ type:'update_preco', payload:{ id, precoVenda: valor } })
+    });
+    const j = await r.json();
+    if(j.ok){
+      // atualiza local
+      const d = DATA.find(x=>x.id===id); if(d) d.precoVenda = valor;
+      toast('Preço salvo ✓');
+      renderTabela(); // recomputa margens
+    }else{
+      toast('Erro ao salvar');
+      console.warn(j.error);
+    }
+  }catch(e){
+    toast('Falha de rede');
+    console.error(e);
+  }
+}
+
+/* ======= Modal de receita detalhada ======= */
+const modal = document.getElementById('modal');
+const modalTitle = document.getElementById('modalTitle');
+const modalResumo = document.getElementById('modalResumo');
+const tblRecBody = document.querySelector('#tblRec tbody');
+
+function openModalReceita(id){
+  const d = DATA.find(x=>x.id===id);
+  if(!d) return;
+  modalTitle.textContent = d.item || 'Receita';
+  modalResumo.textContent = `Rendimento: ${d.rendimento||0} ${d.unidadeRend||''} • Custo da receita: ${fmtBRL(d.custoReceita||0)}`;
+
+  const total = d.custoReceita||0;
+  const rec = Array.isArray(d.receita) ? d.receita : [];
+  tblRecBody.innerHTML = rec.map(l=>{
+    const pct = total>0 ? (Number(l.subtotal||0)/total) : 0;
+    return `
+      <tr>
+        <td>${l.item||''}</td>
+        <td class="right">${Number(l.qtd||0)}</td>
+        <td>${l.um||''}</td>
+        <td class="right">${fmtBRL(l.custoUnit||0)}</td>
+        <td class="right">${fmtBRL(l.subtotal||0)}</td>
+        <td class="right">${fmtPct(pct)}</td>
+      </tr>
+    `;
+  }).join('') || `<tr><td colspan="6" class="muted">Sem itens na receita.</td></tr>`;
+
+  modal.style.display='flex';
+}
+function closeModal(){ modal.style.display='none'; }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+/* ===== Boot ===== */
+document.getElementById('recarregar').addEventListener('click', async ()=>{
+  DATA = await fetchProdutos();
+  renderClassFilter();
+  renderTabela();
+});
+document.getElementById('busca').addEventListener('input', renderTabela);
+document.getElementById('filtroUM').addEventListener('change', renderTabela);
+document.getElementById('filtroClass').addEventListener('change', renderTabela);
+
+// primeira carga
+(async function init(){
+  DATA = await fetchProdutos();
+  renderClassFilter();
+  renderTabela();
+})();
+</script>
+</body>
+</html>
