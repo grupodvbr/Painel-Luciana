@@ -1,31 +1,65 @@
 <!doctype html>
 <html lang="pt-br">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Cadastro de Produto & Receita</title>
-  <style>
-    body{font-family:Arial,Helvetica,sans-serif;background:#0f0f10;color:#f0f0f0;margin:0;padding:24px}
-    h1{margin:0 0 16px}
-    .card{background:#141414;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
-    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
-    label{font-size:.85rem;color:#cfcfcf}
-    input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#0f0f10;color:#fff}
-    table{width:100%;border-collapse:collapse;margin-top:8px}
-    th,td{border:1px solid #2a2a2a;padding:8px;text-align:left}
-    th{background:#000}
-    .accent{background:#b75507;color:#fff}
-    .right{text-align:right}
-    .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:#2563eb;color:#fff}
-    .btn.secondary{background:#334155}
-    .btn.ghost{background:transparent;border:1px solid #374151}
-    .muted{opacity:.8}
-    .pill{padding:4px 8px;border-radius:999px;border:1px solid #374151;font-size:.8rem}
-    .totais{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
-    .totais .pill{background:#111}
-    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    .small{font-size:.9rem}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cadastro de Produto & Receita</title>
+<style>
+  :root{
+    --bg:#0f0f10; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --muted:#cfcfcf;
+    --brand:#2563eb; --ghost:#374151; --accent:#b75507;
+  }
+  *{box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px}
+  h1{margin:0 0 16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+  .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  label{font-size:.85rem;color:var(--muted)}
+  input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#0f0f10;color:#fff}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{border:1px solid var(--line);padding:8px;text-align:left}
+  th{background:#000}
+  .accent{background:var(--accent);color:#fff}
+  .right{text-align:right}
+  .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:var(--brand);color:#fff}
+  .btn.secondary{background:#334155}
+  .btn.ghost{background:transparent;border:1px solid var(--ghost)}
+  .muted{opacity:.85}
+  .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--ghost);font-size:.8rem;background:#111}
+  .totais{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .small{font-size:.9rem}
+  .inline{display:flex;gap:8px;align-items:center}
+  .mini{padding:6px 10px;border-radius:10px}
+
+  /* Mobile compacto */
+  @media (max-width: 768px){
+    body{padding:12px}
+    .row{grid-template-columns:1fr;gap:10px}
+    .totais{flex-direction:column}
+    .desktop-only{display:none !important}
+    .sticky-actions{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;gap:8px;justify-content:space-between}
+    .card{padding:12px}
+    table{font-size:.95rem}
+    th:nth-child(5), td:nth-child(5){display:none;} /* oculta coluna Observação da tabela no mobile */
+  }
+
+  /* ----- Menu flutuante (picker) ----- */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
+  .sheet{width:100%;max-width:680px;background:#121212;border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--line);padding:12px 12px 16px}
+  .sheet .handle{width:44px;height:4px;background:#333;border-radius:999px;margin:6px auto 12px}
+  .sheet header{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .list{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
+  .row-item{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid #1f1f1f}
+  .row-item:hover{background:#0f0f10}
+  .badge{font-size:.75rem;border:1px solid var(--ghost);border-radius:999px;padding:2px 6px}
+  .search{display:flex;gap:8px}
+  .search input{flex:1}
+
+  /* ----- Modal editar ingrediente ----- */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
+  .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+</style>
 </head>
 <body>
   <h1>Cadastro de Produto & Receita</h1>
@@ -56,10 +90,8 @@
       <div style="grid-column: span 2">
         <label>U.M. (do rendimento)</label>
         <select id="unidadeRend">
-          <option value="g">g</option>
-          <option value="kg">kg</option>
-          <option value="ml">ml</option>
-          <option value="l">L</option>
+          <option value="g">g</option><option value="kg">kg</option>
+          <option value="ml">ml</option><option value="l">L</option>
           <option value="un">un</option>
         </select>
       </div>
@@ -73,10 +105,7 @@
   <!-- Receita / ingredientes -->
   <div class="card">
     <div class="grid-2">
-      <div>
-        <strong>Receita (ingredientes)</strong>
-        <div class="small muted">Adicione itens com quantidade e custo unitário.</div>
-      </div>
+      <div><strong>Receita (ingredientes)</strong><div class="small muted">Pegue do menu flutuante ou edite/crie.</div></div>
       <div class="right">
         <button class="btn ghost" id="addLinha">+ Ingrediente</button>
       </div>
@@ -85,11 +114,11 @@
     <table id="tbl">
       <thead>
         <tr>
-          <th class="accent">Item</th>
+          <th class="accent">Item <span class="desktop-only">(clique p/ buscar)</span></th>
           <th>Qtd</th>
           <th>U.M.</th>
           <th>Custo Unit. (R$)</th>
-          <th>Observação</th>
+          <th class="desktop-only">Observação</th>
           <th class="right">Subtotal (R$)</th>
           <th>Ações</th>
         </tr>
@@ -106,192 +135,335 @@
 
   <!-- Salvar -->
   <div class="card">
-    <div class="row">
+    <div class="row desktop-only">
       <div style="grid-column: span 8"></div>
       <div style="grid-column: span 4" class="right">
         <button class="btn secondary" id="recalcular">Recalcular</button>
         <button class="btn" id="salvar">Salvar na Planilha</button>
       </div>
     </div>
-    <div class="small muted" id="status"></div>
+
+    <div class="sticky-actions">
+      <button class="btn secondary mini" id="recalcular_m">Recalcular</button>
+      <button class="btn mini" id="salvar_m">Salvar</button>
+      <span class="small muted" id="status"></span>
+    </div>
   </div>
 
-  <script>
-    const WEBAPP_URL = 'YOUR_WEBAPP_URL'; // <-- cole aqui a URL do Apps Script
+  <!-- Sheet Picker (menu flutuante) -->
+  <div class="overlay" id="picker">
+    <div class="sheet">
+      <div class="handle"></div>
+      <header>
+        <div class="search">
+          <input id="buscaIng" placeholder="Buscar ingrediente por nome ou código...">
+          <button class="btn ghost" id="novoIng">+ Novo</button>
+        </div>
+        <button class="btn ghost" onclick="closePicker()">Fechar</button>
+      </header>
+      <div class="list" id="listaIng"></div>
+    </div>
+  </div>
 
-    const tbody = document.getElementById('tbody');
-    const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-
-    function novaLinha(data={}){
-      const tr = document.createElement('tr');
-
-      tr.innerHTML = `
-        <td><input placeholder="Ex.: Farinha" value="${data.item||''}"></td>
-        <td><input type="number" step="0.0001" inputmode="decimal" value="${data.qtd||''}"></td>
-        <td>
-          <select>
-            <option value="g">g</option>
-            <option value="kg">kg</option>
-            <option value="ml">ml</option>
-            <option value="l">L</option>
+  <!-- Modal editar/criar ingrediente -->
+  <div class="modal" id="modalIng">
+    <div class="box">
+      <h3 id="modalTitulo">Editar ingrediente</h3>
+      <div class="row" style="margin-top:8px">
+        <div style="grid-column: span 4">
+          <label>Código</label>
+          <input id="ing_codigo" placeholder="(gerado se vazio)">
+        </div>
+        <div style="grid-column: span 8">
+          <label>Nome</label>
+          <input id="ing_nome">
+        </div>
+        <div style="grid-column: span 4">
+          <label>U.M.</label>
+          <select id="ing_um">
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">L</option>
             <option value="un">un</option>
           </select>
-        </td>
-        <td><input type="number" step="0.0001" inputmode="decimal" value="${data.custoUnit||''}"></td>
-        <td><input placeholder="Opcional" value="${data.obs||''}"></td>
-        <td class="right subtotal">R$ 0,00</td>
-        <td><button class="btn ghost btnDel">Remover</button></td>
-      `;
+        </div>
+        <div style="grid-column: span 4">
+          <label>Custo Unitário (R$)</label>
+          <input id="ing_custo" type="number" step="0.0001" inputmode="decimal">
+        </div>
+        <div style="grid-column: span 12">
+          <label>Observação</label>
+          <input id="ing_obs">
+        </div>
+      </div>
+      <div class="right" style="margin-top:12px">
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn" id="salvarIng">Salvar ingrediente</button>
+      </div>
+    </div>
+  </div>
 
-      // set unidade (se vier pronta)
-      if (data.um) tr.querySelector('select').value = data.um;
+<script>
+const WEBAPP_URL = 'YOUR_WEBAPP_URL';
+let INGREDIENTES = [];
+let pickerTargetRow = null; // índice da linha da receita a preencher
 
-      tr.querySelectorAll('input,select').forEach(el=>{
-        el.addEventListener('input', atualizarTotais);
-      });
-      tr.querySelector('.btnDel').addEventListener('click', ()=>{
-        tr.remove(); atualizarTotais();
-      });
+const tbody = document.getElementById('tbody');
+const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-      tbody.appendChild(tr);
-      atualizarTotais();
-    }
+// ---- Layout existente (adaptado) ----
+function novaLinha(data={}){
+  const tr = document.createElement('tr');
 
-    function lerTabela(){
-      const linhas = [...tbody.querySelectorAll('tr')];
-      return linhas.map(tr=>{
-        const [item,qtd,um,custoUnit,obs] = tr.querySelectorAll('input,select');
-        const q = parseFloat(qtd.value||'0');
-        const cu = parseFloat(custoUnit.value||'0');
-        return {
-          item: item.value.trim(),
-          qtd: isNaN(q)?0:q,
-          um: um.value,
-          custoUnit: isNaN(cu)?0:cu,
-          obs: obs.value.trim(),
-          subtotal: (isNaN(q)?0:q) * (isNaN(cu)?0:cu)
-        };
-      }).filter(x=>x.item);
-    }
+  tr.innerHTML = `
+    <td>
+      <div class="inline">
+        <input placeholder="Toque/clique p/ buscar" value="${data.item||''}" class="inpItem" readonly>
+        <button class="btn ghost mini btnPick">Buscar</button>
+      </div>
+      <div class="small muted ingInfo"></div>
+    </td>
+    <td><input type="number" step="0.0001" inputmode="decimal" value="${data.qtd||''}" class="inpQtd"></td>
+    <td>
+      <select class="selUM">
+        <option value="g">g</option><option value="kg">kg</option>
+        <option value="ml">ml</option><option value="l">l</option>
+        <option value="un">un</option>
+      </select>
+    </td>
+    <td><input type="number" step="0.0001" inputmode="decimal" value="${data.custoUnit||''}" class="inpCusto"></td>
+    <td class="desktop-only"><input placeholder="Obs. (linha)" value="${data.obs||''}" class="inpObs"></td>
+    <td class="right subtotal">R$ 0,00</td>
+    <td>
+      <div class="inline">
+        <button class="btn ghost mini btnEditIng">Editar</button>
+        <button class="btn ghost mini btnDel">Remover</button>
+      </div>
+    </td>
+  `;
 
-    function atualizarTotais(){
-      const itens = lerTabela();
-      let total = 0;
-      [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{
-        const st = itens[i]?.subtotal || 0;
-        tr.querySelector('.subtotal').textContent = fmtBRL(st);
-        total += st;
-      });
+  // set unidade se veio pronta
+  if (data.um) tr.querySelector('.selUM').value = data.um;
 
-      document.getElementById('custoReceita').textContent = fmtBRL(total);
+  tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); atualizarTotais(); });
+  tr.querySelectorAll('input,select').forEach(el=> el.addEventListener('input', atualizarTotais));
 
-      const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
-      const unidadeRend = document.getElementById('unidadeRend').value;
+  // abrir picker
+  const openPick = () => { pickerTargetRow = tr; openPicker(); };
+  tr.querySelector('.btnPick').addEventListener('click', openPick);
+  tr.querySelector('.inpItem').addEventListener('click', openPick);
 
-      // custo por g/ml (se aplicável)
-      let custoPorGMl = 0, custoPorKgL = 0;
+  // editar ingrediente (abre modal já com dados se houver código ligado)
+  tr.querySelector('.btnEditIng').addEventListener('click', ()=>{
+    const info = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
+    openModal(info);
+  });
 
-      const conv = {
-        g: {base:'g', toBase: v=>v, fromBase: v=>v},
-        kg:{base:'g', toBase: v=>v*1000, fromBase: v=>v/1000},
-        ml:{base:'ml',toBase: v=>v, fromBase: v=>v},
-        l: {base:'ml',toBase: v=>v*1000, fromBase: v=>v/1000},
-        un:{base:'un',toBase: v=>v, fromBase: v=>v}
-      };
+  tbody.appendChild(tr);
+  atualizarTotais();
+}
 
-      if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
-        const emBase = conv[unidadeRend].toBase(rendimento); // g ou ml
-        custoPorGMl = total / emBase;             // R$/g ou R$/ml
-        custoPorKgL = (total / (emBase/1000));    // R$/kg ou R$/L
-      }
+function lerTabela(){
+  const linhas = [...tbody.querySelectorAll('tr')];
+  return linhas.map(tr=>{
+    const qtd = parseFloat(tr.querySelector('.inpQtd').value||'0');
+    const custo = parseFloat(tr.querySelector('.inpCusto').value||'0');
+    return {
+      item: tr.querySelector('.inpItem').value.trim(),
+      qtd: isNaN(qtd)?0:qtd,
+      um: tr.querySelector('.selUM').value,
+      custoUnit: isNaN(custo)?0:custo,
+      obs: (tr.querySelector('.inpObs')?.value||'').trim(),
+      subtotal: (isNaN(qtd)?0:qtd) * (isNaN(custo)?0:custo)
+    };
+  }).filter(x=>x.item);
+}
 
-      document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
-      document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
-    }
+function atualizarTotais(){
+  const itens = lerTabela();
+  let total = 0;
+  [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{
+    const st = itens[i]?.subtotal || 0;
+    tr.querySelector('.subtotal').textContent = fmtBRL(st);
+    total += st;
+  });
 
-    // Eventos
-    document.getElementById('addLinha').addEventListener('click', ()=> novaLinha());
-    document.getElementById('recalcular').addEventListener('click', atualizarTotais);
+  document.getElementById('custoReceita').textContent = fmtBRL(total);
 
-    document.getElementById('salvar').addEventListener('click', async ()=>{
-      const payload = coletarPayload();
-      if(!payload.item){
-        alert('Informe o nome do produto (Item).');
-        return;
-      }
-      const btn = document.getElementById('salvar');
-      const status = document.getElementById('status');
-      btn.disabled = true; status.textContent = 'Enviando...';
+  const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
+  const unidadeRend = document.getElementById('unidadeRend').value;
 
-      try{
-        const r = await fetch(WEBAPP_URL, {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        });
-        const j = await r.json();
-        if(j.ok){
-          status.textContent = 'Salvo com sucesso na aba "Produtos".';
-          limparFormulario();
-        } else {
-          status.textContent = 'Falha ao salvar: ' + (j.error||'');
-        }
-      }catch(err){
-        status.textContent = 'Erro de rede: ' + err.message;
-      }finally{
-        btn.disabled = false;
-      }
-    });
+  let custoPorGMl = 0, custoPorKgL = 0;
+  const conv = {
+    g: {toBase: v=>v}, kg:{toBase: v=>v*1000},
+    ml:{toBase: v=>v}, l:{toBase: v=>v*1000},
+    un:{toBase: v=>v}
+  };
 
-    function coletarPayload(){
-      atualizarTotais(); // garante totais atualizados
+  if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
+    const emBase = conv[unidadeRend].toBase(rendimento); // g ou ml
+    custoPorGMl = total / emBase;
+    custoPorKgL = total / (emBase/1000);
+  }
 
-      const receita = lerTabela();
-      const total = receita.reduce((s,i)=>s+i.subtotal,0);
+  document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
+  document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
+}
 
-      const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
-      const unidadeRend = document.getElementById('unidadeRend').value;
+// ---- Backend calls ----
+async function fetchIngredientes(){
+  const r = await fetch(WEBAPP_URL + '?action=ingredientes');
+  const j = await r.json();
+  if(j.ok){ INGREDIENTES = j.data || []; renderListaIng(); }
+}
 
-      // Recalcula custos de saída (mesma lógica de exibição)
-      let custoPorGMl = 0, custoPorKgL = 0;
-      const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
-      if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
-        const emBase = rendimento * toBase(unidadeRend);
-        custoPorGMl = total / emBase;
-        custoPorKgL = total / (emBase/1000);
-      }
+async function salvarProduto(payload){
+  return fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type:'produto', payload})
+  }).then(r=>r.json());
+}
 
-      return {
-        codigoSistema: document.getElementById('codigoSistema').value.trim(),
-        numero: document.getElementById('numero').value.trim(),
-        classificacao: document.getElementById('classificacao').value.trim(),
-        item: document.getElementById('item').value.trim(),
-        rendimento: document.getElementById('rendimento').value.trim(),
-        unidadeRend,
-        custoReceita: Number(total.toFixed(4)),
-        custoPorGramaOuML: Number(custoPorGMl.toFixed(6)),
-        custoPorKgOuL: Number(custoPorKgL.toFixed(4)),
-        obs: document.getElementById('obs').value.trim(),
-        receita,
-        usuario: '' // opcional: preencha com login, e-mail, etc.
-      };
-    }
+async function upsertIngrediente(obj){
+  return fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type:'ingrediente_upsert', ingrediente:obj})
+  }).then(r=>r.json());
+}
 
-    function limparFormulario(){
-      document.getElementById('codigoSistema').value='';
-      document.getElementById('numero').value='';
-      document.getElementById('classificacao').value='';
-      document.getElementById('item').value='';
-      document.getElementById('rendimento').value='';
-      document.getElementById('unidadeRend').value='g';
-      document.getElementById('obs').value='';
-      tbody.innerHTML='';
-      novaLinha();
-      atualizarTotais();
-    }
+// ---- Picker (menu flutuante) ----
+const picker = document.getElementById('picker');
+const listaIng = document.getElementById('listaIng');
+const buscaIng = document.getElementById('buscaIng');
 
-    // Inicia com 3 linhas
-    novaLinha(); novaLinha(); novaLinha();
-  </script>
+function openPicker(){ picker.style.display='flex'; renderListaIng(); buscaIng.focus(); }
+function closePicker(){ picker.style.display='none'; }
+
+function renderListaIng(){
+  const q = (buscaIng.value||'').toLowerCase();
+  const arr = INGREDIENTES.filter(x=>{
+    return x.nome?.toLowerCase().includes(q) || String(x.codigo||'').toLowerCase().includes(q);
+  });
+  listaIng.innerHTML = arr.map(x=>`
+    <div class="row-item">
+      <div>
+        <div><strong>${x.nome}</strong> <span class="badge">${x.um}</span></div>
+        <div class="small muted">${x.codigo||'-'} • ${fmtBRL(x.custoUnit||0)} ${x.obs?('• '+x.obs):''}</div>
+      </div>
+      <div class="inline">
+        <button class="btn ghost mini" onclick='selectIng(${JSON.stringify(x).replace(/'/g,"&#39;")});'>Selecionar</button>
+        <button class="btn ghost mini" onclick='openModal(${JSON.stringify(x).replace(/'/g,"&#39;")});'>Editar</button>
+      </div>
+    </div>
+  `).join('') || `<div class="row-item"><em class="muted">Nada encontrado.</em></div>`;
+}
+
+buscaIng.addEventListener('input', renderListaIng);
+document.getElementById('novoIng').addEventListener('click', ()=> openModal(null));
+
+function selectIng(ing){
+  if(!pickerTargetRow) return;
+  // preenche campos da linha alvo
+  pickerTargetRow.querySelector('.inpItem').value  = ing.nome||'';
+  pickerTargetRow.querySelector('.selUM').value    = ing.um||'';
+  pickerTargetRow.querySelector('.inpCusto').value = ing.custoUnit||0;
+  pickerTargetRow.querySelector('.ingInfo').textContent = `${ing.codigo||''} • ${ing.obs||''}`;
+  pickerTargetRow.dataset.ing = JSON.stringify(ing);
+  closePicker();
+  atualizarTotais();
+}
+
+// ---- Modal editar/criar ingrediente ----
+const modal = document.getElementById('modalIng');
+const modalTitulo = document.getElementById('modalTitulo');
+const inpCod = document.getElementById('ing_codigo');
+const inpNome = document.getElementById('ing_nome');
+const selUm = document.getElementById('ing_um');
+const inpCusto = document.getElementById('ing_custo');
+const inpObs = document.getElementById('ing_obs');
+const btnSalvarIng = document.getElementById('salvarIng');
+
+function openModal(ing){
+  modal.style.display='flex';
+  modalTitulo.textContent = ing ? 'Editar ingrediente' : 'Novo ingrediente';
+  inpCod.value = ing?.codigo||'';
+  inpNome.value = ing?.nome||'';
+  selUm.value = ing?.um||'g';
+  inpCusto.value = ing?.custoUnit??'';
+  inpObs.value = ing?.obs||'';
+}
+function closeModal(){ modal.style.display='none'; }
+
+btnSalvarIng.addEventListener('click', async ()=>{
+  const data = {
+    codigo: inpCod.value.trim() || null,
+    nome: inpNome.value.trim(),
+    um: selUm.value,
+    custoUnit: Number(inpCusto.value||0),
+    obs: inpObs.value.trim()
+  };
+  if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
+  const res = await upsertIngrediente(data);
+  if(res.ok){
+    await fetchIngredientes(); // atualiza cache/lista
+    closeModal();
+  }else{
+    alert('Erro ao salvar ingrediente: ' + (res.error||''));
+  }
+});
+
+// ---- Salvar produto ----
+function coletarPayload(){
+  const receita = lerTabela();
+  const total = receita.reduce((s,i)=>s+i.subtotal,0);
+
+  const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
+  const unidadeRend = document.getElementById('unidadeRend').value;
+
+  let custoPorGMl = 0, custoPorKgL = 0;
+  const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
+  if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
+    const emBase = rendimento * toBase(unidadeRend);
+    custoPorGMl = total / emBase;
+    custoPorKgL = total / (emBase/1000);
+  }
+
+  return {
+    codigoSistema: document.getElementById('codigoSistema').value.trim(),
+    numero: document.getElementById('numero').value.trim(),
+    classificacao: document.getElementById('classificacao').value.trim(),
+    item: document.getElementById('item').value.trim(),
+    rendimento: document.getElementById('rendimento').value.trim(),
+    unidadeRend,
+    custoReceita: Number(total.toFixed(4)),
+    custoPorGramaOuML: Number(custoPorGMl.toFixed(6)),
+    custoPorKgOuL: Number(custoPorKgL.toFixed(4)),
+    obs: document.getElementById('obs').value.trim(),
+    receita,
+    usuario: ''
+  };
+}
+
+async function handleSalvar(){
+  const payload = coletarPayload();
+  if(!payload.item){ alert('Informe o nome do produto.'); return; }
+  const status = document.getElementById('status');
+  status.textContent = 'Enviando...';
+  const r = await salvarProduto(payload);
+  status.textContent = r.ok ? 'Salvo com sucesso na aba "Produtos".' : ('Erro: ' + (r.error||'')) ;
+}
+
+document.getElementById('salvar').addEventListener('click', handleSalvar);
+document.getElementById('salvar_m').addEventListener('click', handleSalvar);
+document.getElementById('recalcular').addEventListener('click', atualizarTotais);
+document.getElementById('recalcular_m').addEventListener('click', atualizarTotais);
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closePicker(); closeModal(); }});
+
+// ---- Boot ----
+document.getElementById('addLinha').addEventListener('click', ()=> novaLinha());
+novaLinha(); novaLinha(); novaLinha();
+fetchIngredientes();
+</script>
 </body>
 </html>
