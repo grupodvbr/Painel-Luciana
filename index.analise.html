@@ -408,5 +408,118 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeModalRec();
   renderTabela();
 })();
 </script>
+  <script>
+// --- cache e helpers do histórico ---
+let HIST_CACHE = [];  // últimos itens do backend
+
+const fmtDateTime = d => {
+  try{
+    const dt = (d instanceof Date)? d : new Date(d);
+    return dt.toLocaleString('pt-BR');
+  }catch(e){ return String(d||''); }
+};
+
+async function carregarHistorico(){
+  try{
+    const r = await fetch(WEBAPP_URL + '?action=historico&limit=300&ts=' + Date.now(), {cache:'no-store'});
+    const j = await r.json();
+    if(j.ok){ HIST_CACHE = j.data || []; renderHistorico(); }
+    else { toast('Erro ao carregar histórico'); }
+  }catch(e){
+    console.error(e);
+    toast('Falha ao carregar histórico');
+  }
+}
+
+function openHist(){
+  document.getElementById('modalHist').style.display='flex';
+  if(!HIST_CACHE.length) carregarHistorico(); else renderHistorico();
+}
+function closeHist(){ document.getElementById('modalHist').style.display='none'; }
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeHist(); });
+
+// filtrar + render
+function filtrarHistorico(){
+  const q = (document.getElementById('buscaHist').value||'').toLowerCase();
+  const fEnt = document.getElementById('filtroEnt').value;
+  const fAcao = document.getElementById('filtroAcao').value;
+
+  return (HIST_CACHE||[]).filter(h=>{
+    const campos = Object.keys(h.diff||{}).join(' ').toLowerCase();
+    const blob =
+      [h.usuario,h.entidade,h.acao,h.chave,campos].join(' ').toLowerCase();
+
+    const hitQ = !q || blob.includes(q);
+    const hitE = !fEnt || h.entidade===fEnt;
+    const hitA = !fAcao || h.acao===fAcao;
+    return hitQ && hitE && hitA;
+  });
+}
+
+function renderHistorico(){
+  const rows = filtrarHistorico();
+  const tb = document.querySelector('#tblHist tbody');
+  tb.innerHTML = rows.map((h,idx)=>{
+    const campos = Object.keys(h.diff||{});
+    const chips = campos.length
+      ? campos.slice(0,6).map(c=>`<span class="chip">${c}</span>`).join('') + (campos.length>6 ? ` <span class="chip">+${campos.length-6}</span>`:'')
+      : '<span class="chip">—</span>';
+    return `
+      <tr data-i="${idx}">
+        <td>${fmtDateTime(h.ts)}</td>
+        <td>${h.usuario||''}</td>
+        <td>${h.entidade||''}</td>
+        <td>${h.acao||''}</td>
+        <td>${h.chave||''}</td>
+        <td><div class="chips">${chips}</div></td>
+        <td class="right"><button class="mini verJson">ver</button></td>
+      </tr>
+      <tr class="det" data-i="${idx}" style="display:none;background:#0f0f10">
+        <td colspan="7">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div class="muted" style="margin-bottom:4px">Antes</div><pre style="margin:0;white-space:pre-wrap">${escapeHtml(JSON.stringify(h.antes||{},null,2))}</pre></div>
+            <div><div class="muted" style="margin-bottom:4px">Depois</div><pre style="margin:0;white-space:pre-wrap">${escapeHtml(JSON.stringify(h.depois||{},null,2))}</pre></div>
+          </div>
+          <div style="margin-top:8px"><div class="muted" style="margin-bottom:4px">Diff</div><pre style="margin:0;white-space:pre-wrap">${escapeHtml(JSON.stringify(h.diff||{},null,2))}</pre></div>
+        </td>
+      </tr>
+    `;
+  }).join('') || `<tr><td colspan="7" class="muted">Nenhuma alteração encontrada.</td></tr>`;
+
+  // bind toggles
+  tb.querySelectorAll('.verJson').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const i = btn.closest('tr').dataset.i;
+      const det = tb.querySelector(`tr.det[data-i="${i}"]`);
+      det.style.display = det.style.display==='none' ? '' : 'none';
+    });
+  });
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, m => (
+    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]
+  ));
+}
+
+// botões/inputs do modal
+document.getElementById('btnAtualizarHist').addEventListener('click', carregarHistorico);
+document.getElementById('buscaHist').addEventListener('input', renderHistorico);
+document.getElementById('filtroEnt').addEventListener('change', renderHistorico);
+document.getElementById('filtroAcao').addEventListener('change', renderHistorico);
+
+// já existia no seu painel:
+document.getElementById('btnHistorico').addEventListener('click', openHist);
+
+// abrir aba Historico direto na planilha (já tinha endpoint historico_link)
+document.getElementById('abrirAbaHistorico').addEventListener('click', async ()=>{
+  try{
+    const r = await fetch(WEBAPP_URL + '?action=historico_link&ts=' + Date.now(), {cache:'no-store'});
+    const j = await r.json();
+    if(j.ok && j.url) window.open(j.url,'_blank'); else toast('Não consegui abrir a planilha.');
+  }catch(e){ toast('Falha ao abrir a planilha.'); }
+});
+</script>
+
 </body>
 </html>
