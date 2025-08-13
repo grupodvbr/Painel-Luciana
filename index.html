@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cadastro de Produto & Receita</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#0f0f10;color:#f0f0f0;margin:0;padding:24px}
+    h1{margin:0 0 16px}
+    .card{background:#141414;border:1px solid #2a2a2a;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+    .row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+    label{font-size:.85rem;color:#cfcfcf}
+    input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#0f0f10;color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border:1px solid #2a2a2a;padding:8px;text-align:left}
+    th{background:#000}
+    .accent{background:#b75507;color:#fff}
+    .right{text-align:right}
+    .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:#2563eb;color:#fff}
+    .btn.secondary{background:#334155}
+    .btn.ghost{background:transparent;border:1px solid #374151}
+    .muted{opacity:.8}
+    .pill{padding:4px 8px;border-radius:999px;border:1px solid #374151;font-size:.8rem}
+    .totais{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+    .totais .pill{background:#111}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .small{font-size:.9rem}
+  </style>
+</head>
+<body>
+  <h1>Cadastro de Produto & Receita</h1>
+
+  <!-- Dados do produto -->
+  <div class="card">
+    <div class="row">
+      <div style="grid-column: span 3">
+        <label>Código Sistema</label>
+        <input id="codigoSistema" placeholder="Ex.: P-001">
+      </div>
+      <div style="grid-column: span 2">
+        <label>Nº</label>
+        <input id="numero" type="number" inputmode="numeric">
+      </div>
+      <div style="grid-column: span 3">
+        <label>Classificação</label>
+        <input id="classificacao" placeholder="Ex.: Confeitaria">
+      </div>
+      <div style="grid-column: span 4">
+        <label>Item (nome do produto)</label>
+        <input id="item" placeholder="Ex.: Bolo de Chocolate">
+      </div>
+      <div style="grid-column: span 3">
+        <label>QTD / Rendimento</label>
+        <input id="rendimento" type="number" step="0.01" placeholder="Ex.: 1200">
+      </div>
+      <div style="grid-column: span 2">
+        <label>U.M. (do rendimento)</label>
+        <select id="unidadeRend">
+          <option value="g">g</option>
+          <option value="kg">kg</option>
+          <option value="ml">ml</option>
+          <option value="l">L</option>
+          <option value="un">un</option>
+        </select>
+      </div>
+      <div style="grid-column: span 7">
+        <label>OBS.</label>
+        <input id="obs" placeholder="Anotações gerais">
+      </div>
+    </div>
+  </div>
+
+  <!-- Receita / ingredientes -->
+  <div class="card">
+    <div class="grid-2">
+      <div>
+        <strong>Receita (ingredientes)</strong>
+        <div class="small muted">Adicione itens com quantidade e custo unitário.</div>
+      </div>
+      <div class="right">
+        <button class="btn ghost" id="addLinha">+ Ingrediente</button>
+      </div>
+    </div>
+
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th class="accent">Item</th>
+          <th>Qtd</th>
+          <th>U.M.</th>
+          <th>Custo Unit. (R$)</th>
+          <th>Observação</th>
+          <th class="right">Subtotal (R$)</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+
+    <div class="totais">
+      <span class="pill">Custo da Receita: <strong id="custoReceita">R$ 0,00</strong></span>
+      <span class="pill">Custo por grama/ML: <strong id="custoPorGMl">R$ 0,000</strong></span>
+      <span class="pill">Custo por kg/L: <strong id="custoPorKgL">R$ 0,00</strong></span>
+    </div>
+  </div>
+
+  <!-- Salvar -->
+  <div class="card">
+    <div class="row">
+      <div style="grid-column: span 8"></div>
+      <div style="grid-column: span 4" class="right">
+        <button class="btn secondary" id="recalcular">Recalcular</button>
+        <button class="btn" id="salvar">Salvar na Planilha</button>
+      </div>
+    </div>
+    <div class="small muted" id="status"></div>
+  </div>
+
+  <script>
+    const WEBAPP_URL = 'YOUR_WEBAPP_URL'; // <-- cole aqui a URL do Apps Script
+
+    const tbody = document.getElementById('tbody');
+    const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
+    function novaLinha(data={}){
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td><input placeholder="Ex.: Farinha" value="${data.item||''}"></td>
+        <td><input type="number" step="0.0001" inputmode="decimal" value="${data.qtd||''}"></td>
+        <td>
+          <select>
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+            <option value="ml">ml</option>
+            <option value="l">L</option>
+            <option value="un">un</option>
+          </select>
+        </td>
+        <td><input type="number" step="0.0001" inputmode="decimal" value="${data.custoUnit||''}"></td>
+        <td><input placeholder="Opcional" value="${data.obs||''}"></td>
+        <td class="right subtotal">R$ 0,00</td>
+        <td><button class="btn ghost btnDel">Remover</button></td>
+      `;
+
+      // set unidade (se vier pronta)
+      if (data.um) tr.querySelector('select').value = data.um;
+
+      tr.querySelectorAll('input,select').forEach(el=>{
+        el.addEventListener('input', atualizarTotais);
+      });
+      tr.querySelector('.btnDel').addEventListener('click', ()=>{
+        tr.remove(); atualizarTotais();
+      });
+
+      tbody.appendChild(tr);
+      atualizarTotais();
+    }
+
+    function lerTabela(){
+      const linhas = [...tbody.querySelectorAll('tr')];
+      return linhas.map(tr=>{
+        const [item,qtd,um,custoUnit,obs] = tr.querySelectorAll('input,select');
+        const q = parseFloat(qtd.value||'0');
+        const cu = parseFloat(custoUnit.value||'0');
+        return {
+          item: item.value.trim(),
+          qtd: isNaN(q)?0:q,
+          um: um.value,
+          custoUnit: isNaN(cu)?0:cu,
+          obs: obs.value.trim(),
+          subtotal: (isNaN(q)?0:q) * (isNaN(cu)?0:cu)
+        };
+      }).filter(x=>x.item);
+    }
+
+    function atualizarTotais(){
+      const itens = lerTabela();
+      let total = 0;
+      [...tbody.querySelectorAll('tr')].forEach((tr,i)=>{
+        const st = itens[i]?.subtotal || 0;
+        tr.querySelector('.subtotal').textContent = fmtBRL(st);
+        total += st;
+      });
+
+      document.getElementById('custoReceita').textContent = fmtBRL(total);
+
+      const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
+      const unidadeRend = document.getElementById('unidadeRend').value;
+
+      // custo por g/ml (se aplicável)
+      let custoPorGMl = 0, custoPorKgL = 0;
+
+      const conv = {
+        g: {base:'g', toBase: v=>v, fromBase: v=>v},
+        kg:{base:'g', toBase: v=>v*1000, fromBase: v=>v/1000},
+        ml:{base:'ml',toBase: v=>v, fromBase: v=>v},
+        l: {base:'ml',toBase: v=>v*1000, fromBase: v=>v/1000},
+        un:{base:'un',toBase: v=>v, fromBase: v=>v}
+      };
+
+      if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
+        const emBase = conv[unidadeRend].toBase(rendimento); // g ou ml
+        custoPorGMl = total / emBase;             // R$/g ou R$/ml
+        custoPorKgL = (total / (emBase/1000));    // R$/kg ou R$/L
+      }
+
+      document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
+      document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
+    }
+
+    // Eventos
+    document.getElementById('addLinha').addEventListener('click', ()=> novaLinha());
+    document.getElementById('recalcular').addEventListener('click', atualizarTotais);
+
+    document.getElementById('salvar').addEventListener('click', async ()=>{
+      const payload = coletarPayload();
+      if(!payload.item){
+        alert('Informe o nome do produto (Item).');
+        return;
+      }
+      const btn = document.getElementById('salvar');
+      const status = document.getElementById('status');
+      btn.disabled = true; status.textContent = 'Enviando...';
+
+      try{
+        const r = await fetch(WEBAPP_URL, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const j = await r.json();
+        if(j.ok){
+          status.textContent = 'Salvo com sucesso na aba "Produtos".';
+          limparFormulario();
+        } else {
+          status.textContent = 'Falha ao salvar: ' + (j.error||'');
+        }
+      }catch(err){
+        status.textContent = 'Erro de rede: ' + err.message;
+      }finally{
+        btn.disabled = false;
+      }
+    });
+
+    function coletarPayload(){
+      atualizarTotais(); // garante totais atualizados
+
+      const receita = lerTabela();
+      const total = receita.reduce((s,i)=>s+i.subtotal,0);
+
+      const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
+      const unidadeRend = document.getElementById('unidadeRend').value;
+
+      // Recalcula custos de saída (mesma lógica de exibição)
+      let custoPorGMl = 0, custoPorKgL = 0;
+      const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
+      if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
+        const emBase = rendimento * toBase(unidadeRend);
+        custoPorGMl = total / emBase;
+        custoPorKgL = total / (emBase/1000);
+      }
+
+      return {
+        codigoSistema: document.getElementById('codigoSistema').value.trim(),
+        numero: document.getElementById('numero').value.trim(),
+        classificacao: document.getElementById('classificacao').value.trim(),
+        item: document.getElementById('item').value.trim(),
+        rendimento: document.getElementById('rendimento').value.trim(),
+        unidadeRend,
+        custoReceita: Number(total.toFixed(4)),
+        custoPorGramaOuML: Number(custoPorGMl.toFixed(6)),
+        custoPorKgOuL: Number(custoPorKgL.toFixed(4)),
+        obs: document.getElementById('obs').value.trim(),
+        receita,
+        usuario: '' // opcional: preencha com login, e-mail, etc.
+      };
+    }
+
+    function limparFormulario(){
+      document.getElementById('codigoSistema').value='';
+      document.getElementById('numero').value='';
+      document.getElementById('classificacao').value='';
+      document.getElementById('item').value='';
+      document.getElementById('rendimento').value='';
+      document.getElementById('unidadeRend').value='g';
+      document.getElementById('obs').value='';
+      tbody.innerHTML='';
+      novaLinha();
+      atualizarTotais();
+    }
+
+    // Inicia com 3 linhas
+    novaLinha(); novaLinha(); novaLinha();
+  </script>
+</body>
+</html>
