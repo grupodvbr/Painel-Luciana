@@ -37,6 +37,11 @@
   .modal .box small{color:#aaa}
   .icon-btn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff;cursor:pointer}
   .icon-btn:hover{background:#0f0f10}
+
+  /* Modal do Histórico */
+  #modalHist .box{max-width:980px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border:1px solid #374151;border-radius:999px;padding:2px 8px;font-size:.75rem;background:#111}
 </style>
 </head>
 <body>
@@ -52,7 +57,7 @@
     </select>
     <select id="filtroClass"></select>
     <button class="btn mini" id="recarregar">Recarregar</button>
-    <button class="btn mini" id="btnHistorico">Histórico</button> <!-- NOVO -->
+    <button class="btn mini" id="btnHistorico">Histórico</button>
   </div>
 
   <div class="kpi">
@@ -147,37 +152,72 @@
     </div>
   </div>
 
-<script>
+  <!-- Modal Histórico -->
+  <div class="modal" id="modalHist">
+    <div class="box">
+      <h3>Histórico de alterações</h3>
+      <div class="toolbar" style="margin:8px 0 12px">
+        <input id="buscaHist" placeholder="Buscar por item, entidade, ação, usuário ou campo alterado..." style="flex:1">
+        <select id="filtroEnt">
+          <option value="">Entidade (todas)</option>
+          <option value="produto">produto</option>
+          <option value="ingrediente">ingrediente</option>
+        </select>
+        <select id="filtroAcao">
+          <option value="">Ação (todas)</option>
+          <option value="create">create</option>
+          <option value="update">update</option>
+          <option value="update_preco">update_preco</option>
+        </select>
+        <button class="mini" id="btnAtualizarHist">Atualizar</button>
+      </div>
 
+      <div class="table-wrap">
+        <table id="tblHist">
+          <thead>
+            <tr>
+              <th>Quando</th>
+              <th>Usuário</th>
+              <th>Entidade</th>
+              <th>Ação</th>
+              <th>Chave</th>
+              <th>Campos alterados</th>
+              <th class="right">Ver</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div style="text-align:right;margin-top:12px">
+        <button class="mini" onclick="closeHist()">Fechar</button>
+        <button class="mini" id="abrirAbaHistorico">Abrir na planilha</button>
+      </div>
+    </div>
+  </div>
+
+<script>
 /* ====== CONFIG ====== */
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwIQn3iQ7k901KhVjpWJntwLA4-Gv2zqzzS-DlANpt8jTyPocZIWohbgHf19PY5ANL3/exec';
 
 /* ====== ESTADO ====== */
-let DATA = [];            // produtos
-let ING_CACHE = [];       // ingredientes
-let CURRENT_REC_ID = null; // produto atualmente aberto na receita
+let DATA = [];             // produtos
+let ING_CACHE = [];        // ingredientes
+let CURRENT_REC_ID = null; // produto aberto no modal de receita
 
 /* ====== HELPERS ====== */
 const tbody = document.querySelector('#tbl tbody');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const fmtPct = v => isFinite(v) ? (v*100).toFixed(1).replace('.',',')+'%' : '—';
 function toast(m){
-  let t = document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast';
-  Object.assign(t.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',background:'#111',border:'1px solid #333',padding:'8px 12px',borderRadius:'10px',zIndex:99});
-  document.body.appendChild(t); }
+  let t = document.getElementById('toast');
+  if(!t){
+    t=document.createElement('div'); t.id='toast';
+    Object.assign(t.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',background:'#111',border:'1px solid #333',padding:'8px 12px',borderRadius:'10px',zIndex:99,transition:'opacity .2s'});
+    document.body.appendChild(t);
+  }
   t.textContent=m; t.style.opacity=1; clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity=0,1600);
 }
-  async function abrirHistorico(){
-  try{
-    const r = await fetch(WEBAPP_URL + '?action=historico_link&ts=' + Date.now(), {cache:'no-store'});
-    const j = await r.json();
-    if(j.ok && j.url){ window.open(j.url, '_blank'); }
-    else { toast('Não consegui abrir o histórico.'); }
-  }catch(e){ toast('Falha ao abrir histórico.'); }
-}
-
-document.getElementById('btnHistorico').addEventListener('click', abrirHistorico);
-
 
 /* ====== FETCH ====== */
 async function fetchProdutos(){
@@ -315,7 +355,6 @@ function openModalReceita(id){
   const rec = Array.isArray(d.receita) ? d.receita : [];
   tblRecBody.innerHTML = rec.map(l=>{
     const pct = total>0 ? (Number(l.subtotal||0)/total) : 0;
-    // tentamos achar por nome no cache
     const temIng = ING_CACHE.some(ii => (ii.nome||'').toLowerCase() === String(l.item||'').toLowerCase());
     const btn = `<button class="icon-btn btnEditIng" data-nome="${encodeURIComponent(l.item||'')}">✏️</button>`;
     return `
@@ -331,7 +370,6 @@ function openModalReceita(id){
     `;
   }).join('') || `<tr><td colspan="7" class="muted">Sem itens na receita.</td></tr>`;
 
-  // delegação para botões ✏️
   tblRecBody.querySelectorAll('.btnEditIng').forEach(b=>{
     b.addEventListener('click', ()=>{
       const nome = decodeURIComponent(b.dataset.nome||'');
@@ -389,35 +427,9 @@ async function salvarIngredienteDoModal(){
   if(CURRENT_REC_ID!=null){ openModalReceita(CURRENT_REC_ID); }
 }
 
-/* ====== BOOT ====== */
-document.getElementById('recarregar').addEventListener('click', async ()=>{
-  DATA = await fetchProdutos();
-  renderClassFilter(); renderTabela();
-});
-document.getElementById('busca').addEventListener('input', renderTabela);
-document.getElementById('filtroUM').addEventListener('change', renderTabela);
-document.getElementById('filtroClass').addEventListener('change', renderTabela);
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeModalRec(); closeModalIng(); } });
-
-// primeira carga
-(async function init(){
-  // carrega ingredientes antes de abrir receitas (para saber se mostra o ✏️)
-  ING_CACHE = await fetchIngredientes();
-  DATA = await fetchProdutos();
-  renderClassFilter();
-  renderTabela();
-})();
-</script>
-  <script>
-// --- cache e helpers do histórico ---
-let HIST_CACHE = [];  // últimos itens do backend
-
-const fmtDateTime = d => {
-  try{
-    const dt = (d instanceof Date)? d : new Date(d);
-    return dt.toLocaleString('pt-BR');
-  }catch(e){ return String(d||''); }
-};
+/* ====== HISTÓRICO (popup) ====== */
+let HIST_CACHE = [];
+const fmtDateTime = d => { try{ const dt=(d instanceof Date)?d:new Date(d); return dt.toLocaleString('pt-BR'); }catch(e){ return String(d||''); } };
 
 async function carregarHistorico(){
   try{
@@ -425,37 +437,27 @@ async function carregarHistorico(){
     const j = await r.json();
     if(j.ok){ HIST_CACHE = j.data || []; renderHistorico(); }
     else { toast('Erro ao carregar histórico'); }
-  }catch(e){
-    console.error(e);
-    toast('Falha ao carregar histórico');
-  }
+  }catch(e){ console.error(e); toast('Falha ao carregar histórico'); }
 }
-
 function openHist(){
   document.getElementById('modalHist').style.display='flex';
   if(!HIST_CACHE.length) carregarHistorico(); else renderHistorico();
 }
 function closeHist(){ document.getElementById('modalHist').style.display='none'; }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeHist(); });
 
-// filtrar + render
 function filtrarHistorico(){
   const q = (document.getElementById('buscaHist').value||'').toLowerCase();
   const fEnt = document.getElementById('filtroEnt').value;
   const fAcao = document.getElementById('filtroAcao').value;
-
   return (HIST_CACHE||[]).filter(h=>{
     const campos = Object.keys(h.diff||{}).join(' ').toLowerCase();
-    const blob =
-      [h.usuario,h.entidade,h.acao,h.chave,campos].join(' ').toLowerCase();
-
+    const blob = [h.usuario,h.entidade,h.acao,h.chave,campos].join(' ').toLowerCase();
     const hitQ = !q || blob.includes(q);
     const hitE = !fEnt || h.entidade===fEnt;
     const hitA = !fAcao || h.acao===fAcao;
     return hitQ && hitE && hitA;
   });
 }
-
 function renderHistorico(){
   const rows = filtrarHistorico();
   const tb = document.querySelector('#tblHist tbody');
@@ -486,7 +488,6 @@ function renderHistorico(){
     `;
   }).join('') || `<tr><td colspan="7" class="muted">Nenhuma alteração encontrada.</td></tr>`;
 
-  // bind toggles
   tb.querySelectorAll('.verJson').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const i = btn.closest('tr').dataset.i;
@@ -495,23 +496,16 @@ function renderHistorico(){
     });
   });
 }
-
 function escapeHtml(s){
-  return String(s||'').replace(/[&<>"']/g, m => (
-    { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]
-  ));
+  return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 }
 
-// botões/inputs do modal
+/* ====== Eventos globais ====== */
+document.getElementById('btnHistorico').addEventListener('click', openHist);
 document.getElementById('btnAtualizarHist').addEventListener('click', carregarHistorico);
 document.getElementById('buscaHist').addEventListener('input', renderHistorico);
 document.getElementById('filtroEnt').addEventListener('change', renderHistorico);
 document.getElementById('filtroAcao').addEventListener('change', renderHistorico);
-
-// já existia no seu painel:
-document.getElementById('btnHistorico').addEventListener('click', openHist);
-
-// abrir aba Historico direto na planilha (já tinha endpoint historico_link)
 document.getElementById('abrirAbaHistorico').addEventListener('click', async ()=>{
   try{
     const r = await fetch(WEBAPP_URL + '?action=historico_link&ts=' + Date.now(), {cache:'no-store'});
@@ -519,7 +513,23 @@ document.getElementById('abrirAbaHistorico').addEventListener('click', async ()=
     if(j.ok && j.url) window.open(j.url,'_blank'); else toast('Não consegui abrir a planilha.');
   }catch(e){ toast('Falha ao abrir a planilha.'); }
 });
-</script>
 
+document.getElementById('recarregar').addEventListener('click', async ()=>{
+  DATA = await fetchProdutos();
+  renderClassFilter(); renderTabela();
+});
+document.getElementById('busca').addEventListener('input', renderTabela);
+document.getElementById('filtroUM').addEventListener('change', renderTabela);
+document.getElementById('filtroClass').addEventListener('change', renderTabela);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeModalRec(); closeModalIng(); closeHist(); } });
+
+/* ====== primeira carga ====== */
+(async function init(){
+  ING_CACHE = await fetchIngredientes();   // para habilitar ✏️ no modal
+  DATA = await fetchProdutos();
+  renderClassFilter();
+  renderTabela();
+})();
+</script>
 </body>
 </html>
