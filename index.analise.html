@@ -31,8 +31,12 @@
   @media (max-width: 900px){
     .kpi{grid-template-columns:1fr 1fr}
   }
+  /* Modais */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:720px;background:#121212;border:1px solid var(--line);border-radius:14px;padding:16px}
+  .modal .box small{color:#aaa}
+  .icon-btn{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff;cursor:pointer}
+  .icon-btn:hover{background:#0f0f10}
 </style>
 </head>
 <body>
@@ -78,7 +82,7 @@
   </div>
 
   <!-- Modal Receita Detalhada -->
-  <div class="modal" id="modal">
+  <div class="modal" id="modalRec">
     <div class="box">
       <h3 id="modalTitle">Receita</h3>
       <div class="muted" id="modalResumo"></div>
@@ -86,27 +90,75 @@
         <table id="tblRec">
           <thead>
             <tr>
-              <th>Item</th><th class="right">Qtd</th><th>U.M.</th><th class="right">Custo Unit.</th><th class="right">Subtotal</th><th class="right">% no Custo</th>
+              <th>Item</th>
+              <th class="right">Qtd</th>
+              <th>U.M.</th>
+              <th class="right">Custo Unit.</th>
+              <th class="right">Subtotal</th>
+              <th class="right">% no Custo</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
       <div style="text-align:right;margin-top:12px">
-        <button class="mini" onclick="closeModal()">Fechar</button>
+        <button class="mini" onclick="closeModalRec()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Editar/CRIAR Ingrediente -->
+  <div class="modal" id="modalIng">
+    <div class="box">
+      <h3 id="ingTitle">Editar ingrediente</h3>
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:10px;margin-top:8px">
+        <div style="grid-column: span 4">
+          <label>Código <small>(em branco = criar)</small></label>
+          <input id="ing_codigo" placeholder="ex.: ING-0001">
+        </div>
+        <div style="grid-column: span 8">
+          <label>Nome</label>
+          <input id="ing_nome">
+        </div>
+        <div style="grid-column: span 4">
+          <label>U.M. <small>(obrigatório)</small></label>
+          <select id="ing_um" required>
+            <option value="">— selecione —</option>
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">L</option>
+            <option value="un">un</option>
+          </select>
+        </div>
+        <div style="grid-column: span 4">
+          <label>Custo Unitário (R$)</label>
+          <input id="ing_custo" type="number" step="0.0001" inputmode="decimal" placeholder="R$ por U.M.">
+        </div>
+        <div style="grid-column: span 12">
+          <label>Observação</label>
+          <input id="ing_obs">
+        </div>
+      </div>
+      <div style="text-align:right;margin-top:12px">
+        <button class="mini" onclick="closeModalIng()">Cancelar</button>
+        <button class="btn mini" id="btnSalvarIng">Salvar ingrediente</button>
       </div>
     </div>
   </div>
 
 <script>
+/* ====== CONFIG ====== */
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwIQn3iQ7k901KhVjpWJntwLA4-Gv2zqzzS-DlANpt8jTyPocZIWohbgHf19PY5ANL3/exec';
 
-let DATA = [];
+/* ====== ESTADO ====== */
+let DATA = [];            // produtos
+let ING_CACHE = [];       // ingredientes
+let CURRENT_REC_ID = null; // produto atualmente aberto na receita
 
+/* ====== HELPERS ====== */
 const tbody = document.querySelector('#tbl tbody');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const fmtPct = v => isFinite(v) ? (v*100).toFixed(1).replace('.',',')+'%' : '—';
-
 function toast(m){
   let t = document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast';
   Object.assign(t.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',background:'#111',border:'1px solid #333',padding:'8px 12px',borderRadius:'10px',zIndex:99});
@@ -114,6 +166,7 @@ function toast(m){
   t.textContent=m; t.style.opacity=1; clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity=0,1600);
 }
 
+/* ====== FETCH ====== */
 async function fetchProdutos(){
   const url = WEBAPP_URL + '?action=produtos&ts=' + Date.now();
   const r = await fetch(url, { cache:'no-store' });
@@ -121,41 +174,63 @@ async function fetchProdutos(){
   if(!j.ok){ toast('Erro ao carregar produtos'); console.warn(j.error); return []; }
   return j.data || [];
 }
+async function fetchIngredientes(){
+  const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now();
+  const r = await fetch(url, { cache:'no-store' });
+  const j = await r.json();
+  if(!j.ok){ console.warn(j.error); return []; }
+  return j.data || [];
+}
+async function upsertIngrediente(obj){
+  const res = await fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ type:'ingrediente_upsert', ingrediente: obj })
+  });
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
+}
+async function salvarPrecoRemoto(id, preco){
+  const r = await fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ type:'update_preco', payload:{ id, precoVenda: preco } })
+  });
+  return r.json();
+}
 
+/* ====== FILTROS & KPIs ====== */
 function renderClassFilter(){
   const sel = document.getElementById('filtroClass');
   const classes = Array.from(new Set(DATA.map(d=>d.classificacao).filter(Boolean))).sort();
   sel.innerHTML = '<option value="">Classificação (todas)</option>' + classes.map(c=>`<option>${c}</option>`).join('');
 }
-
 function filtrar(){
   const q = (document.getElementById('busca').value||'').toLowerCase();
   const fUM = document.getElementById('filtroUM').value;
   const fC  = document.getElementById('filtroClass').value;
-
   return DATA.filter(d=>{
     const hitQ = (d.item||'').toLowerCase().includes(q) || (d.classificacao||'').toLowerCase().includes(q);
-    const hitUM = !fUM || (fUM==='un' ? d.unidadeRend==='un' : (d.unidadeRend!=='un')); // kg/L vs un
+    const hitUM = !fUM || (fUM==='un' ? d.unidadeRend==='un' : (d.unidadeRend!=='un'));
     const hitC = !fC || d.classificacao===fC;
     return hitQ && hitUM && hitC;
   });
 }
-
 function custoUnitarioBase(d){
   if(['g','kg','ml','l'].includes(d.unidadeRend)) return d.custoPorKgOuL;
   if(d.unidadeRend==='un' && d.rendimento>0) return d.custoReceita / d.rendimento;
   return 0;
 }
 
+/* ====== TABELA ====== */
 function renderTabela(){
   const arr = filtrar();
   tbody.innerHTML = arr.map(d=>{
     const cUnit = custoUnitarioBase(d);
     const margemTxt = d.precoVenda>0 && cUnit>0 ? fmtPct((d.precoVenda - cUnit)/d.precoVenda) : '—';
     const margemCls = (d.precoVenda>0 && cUnit>0 && (d.precoVenda - cUnit)/d.precoVenda >= 0.3) ? 'ok' : 'bad';
-
     const umLabel = d.unidadeRend==='un' ? 'un' : 'kg/L';
-
     return `
       <tr data-id="${d.id}">
         <td>${d.item||''}<div class="muted" style="font-size:.8rem">${d.codigoSistema||''}</div></td>
@@ -164,9 +239,7 @@ function renderTabela(){
         <td><span class="badge">${d.unidadeRend||''}</span></td>
         <td class="right">${fmtBRL(d.custoReceita||0)}</td>
         <td class="right" title="Base: ${umLabel}">${fmtBRL(cUnit||0)}</td>
-        <td class="right">
-          <input class="preco" type="number" step="0.0001" value="${d.precoVenda||''}" style="width:120px;text-align:right">
-        </td>
+        <td class="right"><input class="preco" type="number" step="0.0001" value="${d.precoVenda||''}" style="width:120px;text-align:right"></td>
         <td class="right ${d.precoVenda?margemCls:''}">${margemTxt}</td>
         <td class="right">${d.precoSugerido?fmtBRL(d.precoSugerido):'—'}</td>
         <td>
@@ -177,94 +250,61 @@ function renderTabela(){
     `;
   }).join('') || `<tr><td colspan="10" class="muted">Nada encontrado.</td></tr>`;
 
-  // bind botões
   [...tbody.querySelectorAll('tr')].forEach(tr=>{
     const id = Number(tr.dataset.id);
     tr.querySelector('.ver').addEventListener('click', ()=>openModalReceita(id));
-    tr.querySelector('.salvar').addEventListener('click', ()=>salvarPrecoLinha(tr, id));
+    tr.querySelector('.salvar').addEventListener('click', async ()=>{
+      const inp = tr.querySelector('.preco');
+      const v = Number(inp.value||0);
+      const j = await salvarPrecoRemoto(id, v);
+      if(j.ok){ const d = DATA.find(x=>x.id===id); if(d) d.precoVenda=v; toast('Preço salvo ✓'); renderTabela(); }
+      else { toast('Erro ao salvar'); console.warn(j.error); }
+    });
     tr.querySelector('.preco').addEventListener('input', ()=> atualizarKPIs());
   });
 
   atualizarKPIs();
 }
-
 function atualizarKPIs(){
   const arr = filtrar();
   const n = arr.length;
   document.getElementById('kpiProdutos').textContent = n;
-
-  if(!n){
-    document.getElementById('kpiCustoMedio').textContent = '—';
-    document.getElementById('kpiPrecoMedio').textContent = '—';
-    document.getElementById('kpiMargemMedia').textContent = '—';
-    return;
-  }
+  if(!n){ ['kpiCustoMedio','kpiPrecoMedio','kpiMargemMedia'].forEach(id=>document.getElementById(id).textContent='—'); return; }
   const custos = arr.map(custoUnitarioBase).filter(v=>v>0);
   const precos = arr.map(d=>{
     const tr = tbody.querySelector(`tr[data-id="${d.id}"]`);
     const v = tr ? Number(tr.querySelector('.preco').value||0) : Number(d.precoVenda||0);
     return v||0;
   }).filter(v=>v>0);
-
   const media = a => a.length ? a.reduce((s,v)=>s+v,0)/a.length : 0;
-  const mCusto = media(custos);
-  const mPreco = media(precos);
-  let mMargem = 0;
-  const ms = [];
-  arr.forEach(d=>{
-    const c = custoUnitarioBase(d);
-    const tr = tbody.querySelector(`tr[data-id="${d.id}"]`);
-    const p = tr ? Number(tr.querySelector('.preco').value||0) : Number(d.precoVenda||0);
-    if(c>0 && p>0) ms.push((p-c)/p);
-  });
-  mMargem = media(ms);
-
+  const mCusto = media(custos), mPreco=media(precos);
+  const ms=[]; arr.forEach(d=>{ const c=custoUnitarioBase(d); const tr=tbody.querySelector(`tr[data-id="${d.id}"]`); const p=tr?Number(tr.querySelector('.preco').value||0):Number(d.precoVenda||0); if(c>0&&p>0) ms.push((p-c)/p); });
+  const mMargem = media(ms);
   document.getElementById('kpiCustoMedio').textContent = mCusto?fmtBRL(mCusto):'—';
   document.getElementById('kpiPrecoMedio').textContent = mPreco?fmtBRL(mPreco):'—';
   document.getElementById('kpiMargemMedia').textContent = ms.length?fmtPct(mMargem):'—';
 }
 
-async function salvarPrecoLinha(tr, id){
-  const inp = tr.querySelector('.preco');
-  const valor = Number(inp.value||0);
-  try{
-    const r = await fetch(WEBAPP_URL, {
-      method:'POST',
-      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
-      body: JSON.stringify({ type:'update_preco', payload:{ id, precoVenda: valor } })
-    });
-    const j = await r.json();
-    if(j.ok){
-      // atualiza local
-      const d = DATA.find(x=>x.id===id); if(d) d.precoVenda = valor;
-      toast('Preço salvo ✓');
-      renderTabela(); // recomputa margens
-    }else{
-      toast('Erro ao salvar');
-      console.warn(j.error);
-    }
-  }catch(e){
-    toast('Falha de rede');
-    console.error(e);
-  }
-}
-
-/* ======= Modal de receita detalhada ======= */
-const modal = document.getElementById('modal');
+/* ====== MODAL RECEITA + ✏️ ====== */
+const modalRec = document.getElementById('modalRec');
 const modalTitle = document.getElementById('modalTitle');
 const modalResumo = document.getElementById('modalResumo');
-const tblRecBody = document.querySelector('#tblRec tbody');
+const tblRecBody  = document.querySelector('#tblRec tbody');
 
 function openModalReceita(id){
   const d = DATA.find(x=>x.id===id);
   if(!d) return;
+  CURRENT_REC_ID = id;
   modalTitle.textContent = d.item || 'Receita';
   modalResumo.textContent = `Rendimento: ${d.rendimento||0} ${d.unidadeRend||''} • Custo da receita: ${fmtBRL(d.custoReceita||0)}`;
 
-  const total = d.custoReceita||0;
+  const total = Number(d.custoReceita||0);
   const rec = Array.isArray(d.receita) ? d.receita : [];
   tblRecBody.innerHTML = rec.map(l=>{
     const pct = total>0 ? (Number(l.subtotal||0)/total) : 0;
+    // tentamos achar por nome no cache
+    const temIng = ING_CACHE.some(ii => (ii.nome||'').toLowerCase() === String(l.item||'').toLowerCase());
+    const btn = `<button class="icon-btn btnEditIng" data-nome="${encodeURIComponent(l.item||'')}">✏️</button>`;
     return `
       <tr>
         <td>${l.item||''}</td>
@@ -273,27 +313,83 @@ function openModalReceita(id){
         <td class="right">${fmtBRL(l.custoUnit||0)}</td>
         <td class="right">${fmtBRL(l.subtotal||0)}</td>
         <td class="right">${fmtPct(pct)}</td>
+        <td class="right">${temIng?btn:''}</td>
       </tr>
     `;
-  }).join('') || `<tr><td colspan="6" class="muted">Sem itens na receita.</td></tr>`;
+  }).join('') || `<tr><td colspan="7" class="muted">Sem itens na receita.</td></tr>`;
 
-  modal.style.display='flex';
+  // delegação para botões ✏️
+  tblRecBody.querySelectorAll('.btnEditIng').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const nome = decodeURIComponent(b.dataset.nome||'');
+      const ing = ING_CACHE.find(ii => (ii.nome||'').toLowerCase() === nome.toLowerCase()) || { codigo:'', nome, um:'', custoUnit:'', obs:'' };
+      openModalIng(ing);
+    });
+  });
+
+  modalRec.style.display='flex';
 }
-function closeModal(){ modal.style.display='none'; }
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+function closeModalRec(){ modalRec.style.display='none'; }
 
-/* ===== Boot ===== */
+/* ====== MODAL EDITAR/CRIAR INGREDIENTE ====== */
+const modalIng = document.getElementById('modalIng');
+const ingTitle = document.getElementById('ingTitle');
+const inpCod = document.getElementById('ing_codigo');
+const inpNome = document.getElementById('ing_nome');
+const selUm  = document.getElementById('ing_um');
+const inpCusto = document.getElementById('ing_custo');
+const inpObs = document.getElementById('ing_obs');
+document.getElementById('btnSalvarIng').addEventListener('click', salvarIngredienteDoModal);
+
+function openModalIng(ing){
+  ingTitle.textContent = ing && ing.codigo ? 'Editar ingrediente' : 'Novo ingrediente';
+  inpCod.value = ing?.codigo || '';
+  inpNome.value = ing?.nome || '';
+  selUm.value = ing?.um || '';
+  inpCusto.value = (ing && (ing.custoUnit ?? '') !== '') ? ing.custoUnit : '';
+  inpObs.value = ing?.obs || '';
+  modalIng.style.display='flex';
+}
+function closeModalIng(){ modalIng.style.display='none'; }
+
+async function salvarIngredienteDoModal(){
+  const data = {
+    codigo: (inpCod.value||'').trim() || null,
+    nome: (inpNome.value||'').trim(),
+    um: selUm.value,
+    custoUnit: Number(inpCusto.value||0),
+    obs: (inpObs.value||'').trim()
+  };
+  if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
+  if(!data.um){ alert('Selecione a U.M. do ingrediente.'); return; }
+
+  const r = await upsertIngrediente(data);
+  if(!r.ok){ alert('Erro ao salvar: ' + (r.error||'')); return; }
+
+  toast('Ingrediente salvo ✓');
+  closeModalIng();
+
+  // refresh de ingredientes e produtos; reabre a receita que estava aberta
+  ING_CACHE = await fetchIngredientes();
+  DATA = await fetchProdutos();
+  renderTabela();
+  if(CURRENT_REC_ID!=null){ openModalReceita(CURRENT_REC_ID); }
+}
+
+/* ====== BOOT ====== */
 document.getElementById('recarregar').addEventListener('click', async ()=>{
   DATA = await fetchProdutos();
-  renderClassFilter();
-  renderTabela();
+  renderClassFilter(); renderTabela();
 });
 document.getElementById('busca').addEventListener('input', renderTabela);
 document.getElementById('filtroUM').addEventListener('change', renderTabela);
 document.getElementById('filtroClass').addEventListener('change', renderTabela);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeModalRec(); closeModalIng(); } });
 
 // primeira carga
 (async function init(){
+  // carrega ingredientes antes de abrir receitas (para saber se mostra o ✏️)
+  ING_CACHE = await fetchIngredientes();
   DATA = await fetchProdutos();
   renderClassFilter();
   renderTabela();
