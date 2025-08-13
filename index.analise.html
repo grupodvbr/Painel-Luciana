@@ -148,6 +148,7 @@
   </div>
 
 <script>
+
 /* ====== CONFIG ====== */
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwIQn3iQ7k901KhVjpWJntwLA4-Gv2zqzzS-DlANpt8jTyPocZIWohbgHf19PY5ANL3/exec';
 
@@ -166,6 +167,17 @@ function toast(m){
   document.body.appendChild(t); }
   t.textContent=m; t.style.opacity=1; clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity=0,1600);
 }
+  async function abrirHistorico(){
+  try{
+    const r = await fetch(WEBAPP_URL + '?action=historico_link&ts=' + Date.now(), {cache:'no-store'});
+    const j = await r.json();
+    if(j.ok && j.url){ window.open(j.url, '_blank'); }
+    else { toast('Não consegui abrir o histórico.'); }
+  }catch(e){ toast('Falha ao abrir histórico.'); }
+}
+
+document.getElementById('btnHistorico').addEventListener('click', abrirHistorico);
+
 
 /* ====== FETCH ====== */
 async function fetchProdutos(){
