@@ -44,7 +44,6 @@
     th:nth-child(5), td:nth-child(5){display:none;}
   }
 
-  /* Picker */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
   .sheet{width:100%;max-width:680px;background:#121212;border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--line);padding:12px 12px 16px}
   .sheet .handle{width:44px;height:4px;background:#333;border-radius:999px;margin:6px auto 12px}
@@ -56,7 +55,6 @@
   .search{display:flex;gap:8px}
   .search input{flex:1}
 
-  /* Modal ingrediente */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
   .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 </style>
@@ -102,25 +100,20 @@
     </div>
   </div>
 
-  <!-- Receita / ingredientes -->
+  <!-- Receita -->
   <div class="card">
     <div class="grid-2">
       <div><strong>Receita (ingredientes)</strong><div class="small muted">Pegue do menu flutuante ou edite/crie.</div></div>
-      <div class="right">
-        <button class="btn ghost" id="addLinha">+ Ingrediente</button>
-      </div>
+      <div class="right"><button class="btn ghost" id="addLinha">+ Ingrediente</button></div>
     </div>
 
     <table id="tbl">
       <thead>
         <tr>
           <th class="accent">Item <span class="desktop-only">(clique p/ buscar)</span></th>
-          <th>Qtd</th>
-          <th>U.M.</th>
-          <th>Custo Unit. (R$)</th>
+          <th>Qtd</th><th>U.M.</th><th>Custo Unit. (R$)</th>
           <th class="desktop-only">Observação</th>
-          <th class="right">Subtotal (R$)</th>
-          <th>Ações</th>
+          <th class="right">Subtotal (R$)</th><th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -142,7 +135,6 @@
         <button class="btn" id="salvar">Salvar na Planilha</button>
       </div>
     </div>
-
     <div class="sticky-actions">
       <button class="btn secondary mini" id="recalcular_m">Recalcular</button>
       <button class="btn mini" id="salvar_m">Salvar</button>
@@ -182,10 +174,8 @@
           <label>U.M.</label>
           <select id="ing_um">
             <option value="">Selecione...</option>
-            <option value="g">g</option>
-            <option value="kg">kg</option>
-            <option value="ml">ml</option>
-            <option value="l">L</option>
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">L</option>
             <option value="un">un</option>
           </select>
         </div>
@@ -212,27 +202,19 @@ function toast(msg){
   if(!el){
     el = document.createElement('div');
     el.id = 'appToast';
-    el.style.position='fixed';
-    el.style.left='50%';
-    el.style.bottom='18px';
-    el.style.transform='translateX(-50%)';
-    el.style.background='#111';
-    el.style.border='1px solid #333';
-    el.style.color='#fff';
-    el.style.padding='10px 14px';
-    el.style.borderRadius='10px';
-    el.style.zIndex='999';
-    el.style.boxShadow='0 6px 24px rgba(0,0,0,.4)';
+    el.style.position='fixed'; el.style.left='50%'; el.style.bottom='18px';
+    el.style.transform='translateX(-50%)'; el.style.background='#111';
+    el.style.border='1px solid #333'; el.style.color='#fff';
+    el.style.padding='10px 14px'; el.style.borderRadius='10px';
+    el.style.zIndex='999'; el.style.boxShadow='0 6px 24px rgba(0,0,0,.4)';
     document.body.appendChild(el);
   }
-  el.textContent = msg;
-  el.style.opacity = '1';
-  clearTimeout(el._t);
-  el._t = setTimeout(()=>{ el.style.opacity='0'; }, 1800);
+  el.textContent = msg; el.style.opacity = '1';
+  clearTimeout(el._t); el._t = setTimeout(()=>{ el.style.opacity='0'; }, 1800);
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0VZDYYK6bU6b7AFBgHLITvoOVrhPYHNeZhVkkssZPfvQ-t8Tti9J1x2DChAk_fuXi/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxiTBHL2E4zEuXzV6faG_pKo4Q8hxxOm3XYxAud47I6U57u9wvBBmofWK4z3_C2x45P/exec';
 
 /* ===== ESTADO ===== */
 let INGREDIENTES = [];
@@ -243,7 +225,7 @@ let modalRowRef = null;
 const tbody = document.getElementById('tbody');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-/* ===== UI DE LINHAS ===== */
+/* ===== Linhas da receita ===== */
 function novaLinha(data={}){
   const tr = document.createElement('tr');
   tr.innerHTML = `
@@ -279,14 +261,12 @@ function novaLinha(data={}){
 
   tr.querySelector('.btnEditIcon').addEventListener('click', ()=>{
     const info = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
-    modalRowRef = tr;
-    openModal(info);
+    modalRowRef = tr; openModal(info);
   });
 
   tbody.appendChild(tr);
   atualizarTotais();
 }
-
 function aplicarIngredienteNaLinha(tr, ing){
   if(!tr || !ing) return;
   tr.querySelector('.inpItem').value = ing.nome || '';
@@ -299,7 +279,7 @@ function aplicarIngredienteNaLinha(tr, ing){
   atualizarTotais();
 }
 
-/* ===== LEITURA E CÁLCULO ===== */
+/* ===== Cálculos ===== */
 function lerTabela(){
   const linhas = [...tbody.querySelectorAll('tr')];
   return linhas.map(tr=>{
@@ -315,7 +295,6 @@ function lerTabela(){
     };
   }).filter(x=>x.item);
 }
-
 function atualizarTotais(){
   const itens = lerTabela();
   let total = 0;
@@ -324,14 +303,11 @@ function atualizarTotais(){
     tr.querySelector('.subtotal').textContent = fmtBRL(st);
     total += st;
   });
-
   document.getElementById('custoReceita').textContent = fmtBRL(total);
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
-
   let custoPorGMl = 0, custoPorKgL = 0;
   const conv = { g:v=>v, kg:v=>v*1000, ml:v=>v, l:v=>v*1000, un:v=>v };
-
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
     const emBase = conv[unidadeRend](rendimento);
     custoPorGMl = total / emBase;
@@ -341,21 +317,25 @@ function atualizarTotais(){
   document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
 }
 
-/* ===== BACKEND ===== */
+/* ===== Backend (com parse robusto) ===== */
 async function fetchIngredientes(){
   const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now();
   try{
     const r = await fetch(url, { cache: 'no-store' });
-    const j = await r.json();
+    const txt = await r.text();              // <- lê texto primeiro
+    let j;
+    try { j = JSON.parse(txt); }             // tenta converter
+    catch { throw new Error('Resposta não-JSON do GAS: ' + txt.slice(0,120)); }
+
     if(j.ok){
       INGREDIENTES = Array.isArray(j.data) ? j.data : [];
       renderListaIng();
     }else{
-      console.warn('GET ingredientes não-ok:', j.error);
-      toast('Não foi possível carregar ingredientes.');
+      toast('Erro: ' + (j.error||'Falha ao carregar ingredientes'));
+      console.warn('GET ingredientes:', j);
     }
   }catch(err){
-    console.error('Erro GET ingredientes:', err);
+    console.error(err);
     toast('Erro ao carregar ingredientes.');
   }
 }
@@ -370,7 +350,6 @@ async function salvarProduto(payload){
   try { return JSON.parse(txt); }
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
-
 async function upsertIngrediente(obj){
   const res = await fetch(WEBAPP_URL, {
     method:'POST',
@@ -382,7 +361,7 @@ async function upsertIngrediente(obj){
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
 
-/* ===== PICKER ===== */
+/* ===== Picker ===== */
 const picker = document.getElementById('picker');
 const listaIng = document.getElementById('listaIng');
 const buscaIng = document.getElementById('buscaIng');
@@ -390,11 +369,9 @@ const buscaIng = document.getElementById('buscaIng');
 function openPicker(){
   picker.style.display='flex';
   if(!INGREDIENTES.length){ fetchIngredientes(); }
-  renderListaIng(); 
-  buscaIng.focus();
+  renderListaIng(); buscaIng.focus();
 }
 function closePicker(){ picker.style.display='none'; }
-
 function renderListaIng(){
   const q = (buscaIng.value||'').toLowerCase();
   const arr = INGREDIENTES.filter(x=>{
@@ -413,17 +390,15 @@ function renderListaIng(){
     </div>
   `).join('') || `<div class="row-item"><em class="muted">Nada encontrado.</em></div>`;
 }
-
 buscaIng.addEventListener('input', renderListaIng);
 document.getElementById('novoIng').addEventListener('click', ()=> openModal(null));
-
 function selectIng(ing){
   if(!pickerTargetRow) return;
   aplicarIngredienteNaLinha(pickerTargetRow, ing);
   closePicker();
 }
 
-/* ===== MODAL ingrediente ===== */
+/* ===== Modal ingrediente ===== */
 const modal = document.getElementById('modalIng');
 const modalTitulo = document.getElementById('modalTitulo');
 const inpCod = document.getElementById('ing_codigo');
@@ -438,7 +413,7 @@ function openModal(ing){
   modalTitulo.textContent = ing ? 'Editar ingrediente' : 'Novo ingrediente';
   inpCod.value = ing?.codigo||'';
   inpNome.value = ing?.nome||'';
-  selUm.value = ing?.um || '';                // <- começa vazio se novo
+  selUm.value = ing?.um || '';  // obrigatório, começa vazio
   inpCusto.value = ing?.custoUnit??'';
   inpObs.value = ing?.obs||'';
 }
@@ -453,34 +428,39 @@ btnSalvarIng.addEventListener('click', async ()=>{
     obs: (inpObs.value||'').trim()
   };
   if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
-  if(!data.um){ alert('Selecione a unidade de medida.'); return; }   // <- obrigatório
+  if(!data.um){ alert('Selecione a unidade de medida.'); return; }
 
   const res = await upsertIngrediente(data);
-  if(!res.ok){
-    alert('Erro ao salvar ingrediente: ' + (res.error||''));
-    return;
+  if(!res.ok){ alert('Erro ao salvar ingrediente: ' + (res.error||'')); return; }
+
+  // se o backend mandou a lista completa, usa já
+  if(Array.isArray(res.data)){
+    INGREDIENTES = res.data;
+  }else{
+    // fallback: atualiza local mínimo
+    const codigo = String(res.codigo || data.codigo || '').trim();
+    const novo = { codigo: codigo || '', nome: data.nome, um: data.um, custoUnit: data.custoUnit, obs: data.obs };
+    const i = INGREDIENTES.findIndex(x => String(x.codigo) === codigo && codigo);
+    if(i >= 0) INGREDIENTES[i] = novo; else INGREDIENTES.push(novo);
   }
 
-  const codigo = String(res.codigo || data.codigo || '').trim();
-  const novo = { codigo: codigo || '', nome: data.nome, um: data.um, custoUnit: data.custoUnit, obs: data.obs };
+  if(modalRowRef){
+    // reaplica na linha que estava sendo editada
+    const cur = INGREDIENTES.find(x=>x.codigo === (res.codigo||data.codigo));
+    aplicarIngredienteNaLinha(modalRowRef, cur || data);
+  }
 
-  const i = INGREDIENTES.findIndex(x => String(x.codigo) === codigo && codigo);
-  if(i >= 0) INGREDIENTES[i] = novo; else INGREDIENTES.push(novo);
-
-  if(modalRowRef){ aplicarIngredienteNaLinha(modalRowRef, novo); }
-
-  fetchIngredientes();  // repuxa do servidor (sem cache)
+  renderListaIng();   // refaz a lista do picker
   closeModal();
   toast('Ingrediente salvo ✓');
 });
 
-/* ===== SALVAR PRODUTO ===== */
+/* ===== Produto ===== */
 function coletarPayload(){
   const receita = lerTabela();
   const total = receita.reduce((s,i)=>s+i.subtotal,0);
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
-
   let custoPorGMl = 0, custoPorKgL = 0;
   const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
@@ -503,7 +483,6 @@ function coletarPayload(){
     usuario: ''
   };
 }
-
 async function handleSalvar(){
   const payload = coletarPayload();
   if(!payload.item){ alert('Informe o nome do produto.'); return; }
@@ -517,7 +496,7 @@ async function handleSalvar(){
   }
 }
 
-/* ===== BOOT ===== */
+/* ===== Boot ===== */
 document.getElementById('salvar').addEventListener('click', handleSalvar);
 document.getElementById('salvar_m').addEventListener('click', handleSalvar);
 document.getElementById('recalcular').addEventListener('click', atualizarTotais);
