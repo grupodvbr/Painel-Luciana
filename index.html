@@ -32,7 +32,30 @@
   .inline{display:flex;gap:8px;align-items:center}
   .mini{padding:6px 10px;border-radius:10px}
   .icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff}
-
+ /* Botão Análise Técnica */
+    .btn-analise {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      background: var(--brand);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+      transition: background 0.2s;
+    }
+    .btn-analise:hover {
+      background: #1e4fbf; /* tom mais escuro no hover */
+    }
+    @media (max-width: 768px) {
+      .btn-analise {
+        top: 12px;
+        right: 12px;
+        padding: 8px 12px;
+      }
+    }
   /* Mobile compacto */
   @media (max-width: 768px){
     body{padding:12px}
@@ -63,6 +86,7 @@
 </style>
 </head>
 <body>
+  <a href="index.analise.html" class="btn-analise">Análise Técnica</a>
   <h1>Cadastro de Produto & Receita</h1>
 
   <!-- Dados do produto -->
