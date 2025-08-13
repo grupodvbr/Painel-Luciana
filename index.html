@@ -203,7 +203,7 @@
   </div>
 
 <script>
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwCXWzzupR-gjONuKO1EMKVk9oyRyMKUdeDNvYo-TVy9xS8cdnmHyXHK9j71WplqBXT/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwNcJ0FoUmxsKzWkQeIBngg_mrxylBFXwkq7dfXVlc_tQDd3_A2m99HFxae51Va3Bhy/exec';
 let INGREDIENTES = [];
 let pickerTargetRow = null; // índice da linha da receita a preencher
 
@@ -317,12 +317,15 @@ async function fetchIngredientes(){
 }
 
 async function salvarProduto(payload){
-  return fetch(WEBAPP_URL, {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({type:'produto', payload})
-  }).then(r=>r.json());
+  const res = await fetch(WEBAPP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ type:'produto', payload })
+  });
+  const txt = await res.text();
+  try { return JSON.parse(txt); } catch { return { ok:false, error:'Resposta não-JSON: '+txt }; }
 }
+
 
 async function upsertIngrediente(obj){
   return fetch(WEBAPP_URL, {
