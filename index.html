@@ -33,6 +33,7 @@
   .mini{padding:6px 10px;border-radius:10px}
   .icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff}
 
+  /* Mobile compacto */
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
@@ -41,9 +42,10 @@
     .sticky-actions{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;gap:8px;justify-content:space-between}
     .card{padding:12px}
     table{font-size:.95rem}
-    th:nth-child(5), td:nth-child(5){display:none;}
+    th:nth-child(5), td:nth-child(5){display:none;} /* oculta Observação no mobile */
   }
 
+  /* ----- Menu flutuante (picker) ----- */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
   .sheet{width:100%;max-width:680px;background:#121212;border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--line);padding:12px 12px 16px}
   .sheet .handle{width:44px;height:4px;background:#333;border-radius:999px;margin:6px auto 12px}
@@ -55,6 +57,7 @@
   .search{display:flex;gap:8px}
   .search input{flex:1}
 
+  /* ----- Modal editar ingrediente ----- */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
   .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 </style>
@@ -100,20 +103,25 @@
     </div>
   </div>
 
-  <!-- Receita -->
+  <!-- Receita / ingredientes -->
   <div class="card">
     <div class="grid-2">
       <div><strong>Receita (ingredientes)</strong><div class="small muted">Pegue do menu flutuante ou edite/crie.</div></div>
-      <div class="right"><button class="btn ghost" id="addLinha">+ Ingrediente</button></div>
+      <div class="right">
+        <button class="btn ghost" id="addLinha">+ Ingrediente</button>
+      </div>
     </div>
 
     <table id="tbl">
       <thead>
         <tr>
           <th class="accent">Item <span class="desktop-only">(clique p/ buscar)</span></th>
-          <th>Qtd</th><th>U.M.</th><th>Custo Unit. (R$)</th>
+          <th>Qtd</th>
+          <th>U.M.</th>
+          <th>Custo Unit. (R$)</th>
           <th class="desktop-only">Observação</th>
-          <th class="right">Subtotal (R$)</th><th>Ações</th>
+          <th class="right">Subtotal (R$)</th>
+          <th>Ações</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -135,6 +143,7 @@
         <button class="btn" id="salvar">Salvar na Planilha</button>
       </div>
     </div>
+
     <div class="sticky-actions">
       <button class="btn secondary mini" id="recalcular_m">Recalcular</button>
       <button class="btn mini" id="salvar_m">Salvar</button>
@@ -142,7 +151,7 @@
     </div>
   </div>
 
-  <!-- Picker -->
+  <!-- Sheet Picker (menu flutuante) -->
   <div class="overlay" id="picker">
     <div class="sheet">
       <div class="handle"></div>
@@ -157,7 +166,7 @@
     </div>
   </div>
 
-  <!-- Modal ingrediente -->
+  <!-- Modal editar/criar ingrediente -->
   <div class="modal" id="modalIng">
     <div class="box">
       <h3 id="modalTitulo">Editar ingrediente</h3>
@@ -171,9 +180,9 @@
           <input id="ing_nome">
         </div>
         <div style="grid-column: span 4">
-          <label>U.M.</label>
-          <select id="ing_um">
-            <option value="">Selecione...</option>
+          <label>U.M. <span class="small muted">(obrigatório)</span></label>
+          <select id="ing_um" required>
+            <option value="">— selecione —</option>
             <option value="g">g</option><option value="kg">kg</option>
             <option value="ml">ml</option><option value="l">L</option>
             <option value="un">un</option>
@@ -181,7 +190,7 @@
         </div>
         <div style="grid-column: span 4">
           <label>Custo Unitário (R$)</label>
-          <input id="ing_custo" type="number" step="0.0001" inputmode="decimal">
+          <input id="ing_custo" type="number" step="0.0001" inputmode="decimal" placeholder="R$ por U.M.">
         </div>
         <div style="grid-column: span 12">
           <label>Observação</label>
@@ -196,38 +205,59 @@
   </div>
 
 <script>
-/* ===== Toast ===== */
+/* ===== TOAST ===== */
 function toast(msg){
   let el = document.getElementById('appToast');
   if(!el){
     el = document.createElement('div');
     el.id = 'appToast';
-    el.style.position='fixed'; el.style.left='50%'; el.style.bottom='18px';
-    el.style.transform='translateX(-50%)'; el.style.background='#111';
-    el.style.border='1px solid #333'; el.style.color='#fff';
-    el.style.padding='10px 14px'; el.style.borderRadius='10px';
-    el.style.zIndex='999'; el.style.boxShadow='0 6px 24px rgba(0,0,0,.4)';
+    el.style.position='fixed';
+    el.style.left='50%';
+    el.style.bottom='18px';
+    el.style.transform='translateX(-50%)';
+    el.style.background='#111';
+    el.style.border='1px solid #333';
+    el.style.color='#fff';
+    el.style.padding='10px 14px';
+    el.style.borderRadius='10px';
+    el.style.zIndex='999';
+    el.style.boxShadow='0 6px 24px rgba(0,0,0,.4)';
+    el.style.transition='opacity .25s';
     document.body.appendChild(el);
   }
-  el.textContent = msg; el.style.opacity = '1';
-  clearTimeout(el._t); el._t = setTimeout(()=>{ el.style.opacity='0'; }, 1800);
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>{ el.style.opacity='0'; }, 2000);
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxiTBHL2E4zEuXzV6faG_pKo4Q8hxxOm3XYxAud47I6U57u9wvBBmofWK4z3_C2x45P/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0VZDYYK6bU6b7AFBgHLITvoOVrhPYHNeZhVkkssZPfvQ-t8Tti9J1x2DChAk_fuXi/exec';
 
 /* ===== ESTADO ===== */
 let INGREDIENTES = [];
-let pickerTargetRow = null;
-let modalRowRef = null;
+let pickerTargetRow = null;   // <tr> alvo ao selecionar no picker
+let modalRowRef = null;       // <tr> alvo ao abrir o modal pelo lápis (edição)
 
 /* ===== HELPERS ===== */
 const tbody = document.getElementById('tbody');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 
-/* ===== Linhas da receita ===== */
+// conversões entre g↔kg e ml↔L (un permanece 1:1)
+const FACTOR = { g:1, kg:1000, ml:1, l:1000, un:1 };
+const TYPE   = u => (u==='g'||u==='kg')?'mass' : (u==='ml'||u==='l')?'vol' : 'count';
+function convertQty(qty, from, to){
+  from = (from||'').toLowerCase();
+  to   = (to||'').toLowerCase();
+  if(!FACTOR[from] || !FACTOR[to]) return qty;
+  if(TYPE(from) !== TYPE(to)) return NaN;
+  return qty * (FACTOR[from] / FACTOR[to]);
+}
+
+/* ===== UI DE LINHAS ===== */
 function novaLinha(data={}){
   const tr = document.createElement('tr');
+
   tr.innerHTML = `
     <td>
       <div class="inline">
@@ -239,62 +269,93 @@ function novaLinha(data={}){
     </td>
     <td><input type="number" step="0.0001" inputmode="decimal" value="${data.qtd||''}" class="inpQtd"></td>
     <td>
-      <select class="selUM">
+      <select class="selUM" required>
+        <option value="">— selecione —</option>
         <option value="g">g</option><option value="kg">kg</option>
         <option value="ml">ml</option><option value="l">l</option>
         <option value="un">un</option>
       </select>
     </td>
-    <td><input type="number" step="0.0001" inputmode="decimal" value="${data.custoUnit||''}" class="inpCusto"></td>
+    <td><input type="number" step="0.0001" inputmode="decimal" value="${data.custoUnit||''}" class="inpCusto" placeholder="R$ por U.M."></td>
     <td class="desktop-only"><input placeholder="Obs. (linha)" value="${data.obs||''}" class="inpObs"></td>
     <td class="right subtotal">R$ 0,00</td>
     <td><button class="btn ghost mini btnDel">Remover</button></td>
   `;
+
+  // Se veio unidade, setar
   if (data.um) tr.querySelector('.selUM').value = data.um;
 
+  // Ações
   tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); atualizarTotais(); });
   tr.querySelectorAll('input,select').forEach(el=> el.addEventListener('input', atualizarTotais));
 
+  // Picker abrir
   const openPick = () => { pickerTargetRow = tr; openPicker(); };
   tr.querySelector('.btnPick').addEventListener('click', openPick);
   tr.querySelector('.inpItem').addEventListener('click', openPick);
 
+  // Ícone lápis (editar no mesmo modal)
   tr.querySelector('.btnEditIcon').addEventListener('click', ()=>{
     const info = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
-    modalRowRef = tr; openModal(info);
+    modalRowRef = tr;
+    openModal(info);
   });
 
   tbody.appendChild(tr);
   atualizarTotais();
 }
+
 function aplicarIngredienteNaLinha(tr, ing){
   if(!tr || !ing) return;
-  tr.querySelector('.inpItem').value = ing.nome || '';
-  tr.querySelector('.selUM').value   = ing.um || '';
-  tr.querySelector('.inpCusto').value= ing.custoUnit || 0;
+  tr.querySelector('.inpItem').value   = ing.nome || '';
+  // mantém U.M. já escolhida na linha (se vazia, usa a do ingrediente)
+  const actualUM = tr.querySelector('.selUM').value || (ing.um||'').toLowerCase();
+  tr.querySelector('.selUM').value     = actualUM;
+  tr.querySelector('.inpCusto').value  = ing.custoUnit || 0;
   tr.querySelector('.ingInfo').textContent = `${ing.codigo||''} • ${ing.obs||''}`;
   tr.dataset.ing = JSON.stringify(ing);
+
+  // guarda a U.M. do PREÇO (de onde vem o custoUnit)
+  tr.dataset.priceUm = (ing.um||'').toLowerCase();
+  tr.querySelector('.inpCusto').placeholder = `R$ por ${tr.dataset.priceUm || 'U.M.'}`;
+
+  // Após selecionar: esconder "Buscar", mostrar "✏️"
   tr.querySelector('.btnPick').style.display = 'none';
   tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
+
   atualizarTotais();
 }
 
-/* ===== Cálculos ===== */
+/* ===== LEITURA E CÁLCULO ===== */
 function lerTabela(){
   const linhas = [...tbody.querySelectorAll('tr')];
   return linhas.map(tr=>{
     const qtd = parseFloat(tr.querySelector('.inpQtd').value||'0');
     const custo = parseFloat(tr.querySelector('.inpCusto').value||'0');
+    const umLinha  = (tr.querySelector('.selUM').value||'').toLowerCase();
+    const umPreco  = (tr.dataset.priceUm || umLinha || '').toLowerCase();
+
+    const qtdNaUMdoPreco = convertQty(isNaN(qtd)?0:qtd, umLinha, umPreco);
+    const subtotal = (isNaN(qtdNaUMdoPreco)?0:qtdNaUMdoPreco) * (isNaN(custo)?0:custo);
+
+    // aviso se incompatível
+    if(Number.isNaN(qtdNaUMdoPreco)){
+      const info = tr.querySelector('.ingInfo');
+      if(info) info.textContent = '⚠ U.M. incompatível (qtd vs preço)';
+    }
+
     return {
       item: tr.querySelector('.inpItem').value.trim(),
       qtd: isNaN(qtd)?0:qtd,
-      um: tr.querySelector('.selUM').value,
+      um: umLinha,
+      priceUm: umPreco,
       custoUnit: isNaN(custo)?0:custo,
       obs: (tr.querySelector('.inpObs')?.value||'').trim(),
-      subtotal: (isNaN(qtd)?0:qtd) * (isNaN(custo)?0:custo)
+      subtotal
     };
   }).filter(x=>x.item);
 }
+
 function atualizarTotais(){
   const itens = lerTabela();
   let total = 0;
@@ -303,40 +364,41 @@ function atualizarTotais(){
     tr.querySelector('.subtotal').textContent = fmtBRL(st);
     total += st;
   });
+
   document.getElementById('custoReceita').textContent = fmtBRL(total);
+
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
+
   let custoPorGMl = 0, custoPorKgL = 0;
   const conv = { g:v=>v, kg:v=>v*1000, ml:v=>v, l:v=>v*1000, un:v=>v };
+
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
-    const emBase = conv[unidadeRend](rendimento);
+    const emBase = conv[unidadeRend](rendimento); // g ou ml
     custoPorGMl = total / emBase;
     custoPorKgL = total / (emBase/1000);
   }
+
   document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
   document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
 }
 
-/* ===== Backend (com parse robusto) ===== */
+/* ===== BACKEND CALLS ===== */
 async function fetchIngredientes(){
-  const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now();
+  const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now(); // cache-buster
   try{
     const r = await fetch(url, { cache: 'no-store' });
-    const txt = await r.text();              // <- lê texto primeiro
-    let j;
-    try { j = JSON.parse(txt); }             // tenta converter
-    catch { throw new Error('Resposta não-JSON do GAS: ' + txt.slice(0,120)); }
-
+    const j = await r.json();
     if(j.ok){
       INGREDIENTES = Array.isArray(j.data) ? j.data : [];
       renderListaIng();
-    }else{
-      toast('Erro: ' + (j.error||'Falha ao carregar ingredientes'));
-      console.warn('GET ingredientes:', j);
+    } else {
+      toast('Erro ao carregar ingredientes.');
+      console.warn(j.error);
     }
-  }catch(err){
-    console.error(err);
+  }catch(e){
     toast('Erro ao carregar ingredientes.');
+    console.error(e);
   }
 }
 
@@ -350,6 +412,7 @@ async function salvarProduto(payload){
   try { return JSON.parse(txt); }
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
+
 async function upsertIngrediente(obj){
   const res = await fetch(WEBAPP_URL, {
     method:'POST',
@@ -361,17 +424,14 @@ async function upsertIngrediente(obj){
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
 
-/* ===== Picker ===== */
+/* ===== PICKER ===== */
 const picker = document.getElementById('picker');
 const listaIng = document.getElementById('listaIng');
 const buscaIng = document.getElementById('buscaIng');
 
-function openPicker(){
-  picker.style.display='flex';
-  if(!INGREDIENTES.length){ fetchIngredientes(); }
-  renderListaIng(); buscaIng.focus();
-}
+function openPicker(){ picker.style.display='flex'; renderListaIng(); buscaIng.focus(); }
 function closePicker(){ picker.style.display='none'; }
+
 function renderListaIng(){
   const q = (buscaIng.value||'').toLowerCase();
   const arr = INGREDIENTES.filter(x=>{
@@ -390,15 +450,17 @@ function renderListaIng(){
     </div>
   `).join('') || `<div class="row-item"><em class="muted">Nada encontrado.</em></div>`;
 }
+
 buscaIng.addEventListener('input', renderListaIng);
 document.getElementById('novoIng').addEventListener('click', ()=> openModal(null));
+
 function selectIng(ing){
   if(!pickerTargetRow) return;
   aplicarIngredienteNaLinha(pickerTargetRow, ing);
   closePicker();
 }
 
-/* ===== Modal ingrediente ===== */
+/* ===== MODAL editar/criar ingrediente ===== */
 const modal = document.getElementById('modalIng');
 const modalTitulo = document.getElementById('modalTitulo');
 const inpCod = document.getElementById('ing_codigo');
@@ -413,11 +475,17 @@ function openModal(ing){
   modalTitulo.textContent = ing ? 'Editar ingrediente' : 'Novo ingrediente';
   inpCod.value = ing?.codigo||'';
   inpNome.value = ing?.nome||'';
-  selUm.value = ing?.um || '';  // obrigatório, começa vazio
-  inpCusto.value = ing?.custoUnit??'';
-  inpObs.value = ing?.obs||'';
+  selUm.value = ing?.um || '';
+  inpCusto.value = ing?.custoUnit ?? '';
+  inpObs.value = ing?.obs || '';
+  // dica de placeholder de custo
+  inpCusto.placeholder = selUm.value ? `R$ por ${selUm.value}` : 'R$ por U.M.';
 }
 function closeModal(){ modal.style.display='none'; modalRowRef = null; }
+
+selUm.addEventListener('change', ()=>{
+  inpCusto.placeholder = selUm.value ? `R$ por ${selUm.value}` : 'R$ por U.M.';
+});
 
 btnSalvarIng.addEventListener('click', async ()=>{
   const data = {
@@ -428,39 +496,40 @@ btnSalvarIng.addEventListener('click', async ()=>{
     obs: (inpObs.value||'').trim()
   };
   if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
-  if(!data.um){ alert('Selecione a unidade de medida.'); return; }
+  if(!data.um){ alert('Selecione a U.M. do ingrediente.'); return; }
 
   const res = await upsertIngrediente(data);
-  if(!res.ok){ alert('Erro ao salvar ingrediente: ' + (res.error||'')); return; }
-
-  // se o backend mandou a lista completa, usa já
-  if(Array.isArray(res.data)){
-    INGREDIENTES = res.data;
-  }else{
-    // fallback: atualiza local mínimo
-    const codigo = String(res.codigo || data.codigo || '').trim();
-    const novo = { codigo: codigo || '', nome: data.nome, um: data.um, custoUnit: data.custoUnit, obs: data.obs };
-    const i = INGREDIENTES.findIndex(x => String(x.codigo) === codigo && codigo);
-    if(i >= 0) INGREDIENTES[i] = novo; else INGREDIENTES.push(novo);
+  if(!res.ok){
+    alert('Erro ao salvar ingrediente: ' + (res.error||'')); return;
   }
 
-  if(modalRowRef){
-    // reaplica na linha que estava sendo editada
-    const cur = INGREDIENTES.find(x=>x.codigo === (res.codigo||data.codigo));
-    aplicarIngredienteNaLinha(modalRowRef, cur || data);
-  }
+  // Atualiza cache local imediatamente
+  const codigo = String(res.codigo || data.codigo || '').trim();
+  const novo = { codigo: codigo || (INGREDIENTES.length ? ('ING-'+(INGREDIENTES.length+1)) : ''), nome: data.nome, um: data.um, custoUnit: data.custoUnit, obs: data.obs };
+  const i = INGREDIENTES.findIndex(x => String(x.codigo) === codigo && codigo);
+  if(i >= 0) INGREDIENTES[i] = novo; else INGREDIENTES.push(novo);
 
-  renderListaIng();   // refaz a lista do picker
+  // Se estava editando a partir da linha, reaplica
+  if(modalRowRef){ aplicarIngredienteNaLinha(modalRowRef, novo); }
+
+  fetchIngredientes(); // refresh assíncrono
   closeModal();
   toast('Ingrediente salvo ✓');
 });
 
-/* ===== Produto ===== */
+/* ===== SALVAR PRODUTO ===== */
 function coletarPayload(){
   const receita = lerTabela();
+
+  // valida: todas as linhas com item devem ter U.M.
+  const invalida = receita.find(r => !r.um);
+  if(invalida){ throw new Error('Há ingrediente sem U.M. selecionada.'); }
+
   const total = receita.reduce((s,i)=>s+i.subtotal,0);
+
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
+
   let custoPorGMl = 0, custoPorKgL = 0;
   const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
@@ -468,6 +537,7 @@ function coletarPayload(){
     custoPorGMl = total / emBase;
     custoPorKgL = total / (emBase/1000);
   }
+
   return {
     codigoSistema: document.getElementById('codigoSistema').value.trim(),
     numero: document.getElementById('numero').value.trim(),
@@ -483,9 +553,17 @@ function coletarPayload(){
     usuario: ''
   };
 }
+
 async function handleSalvar(){
-  const payload = coletarPayload();
+  let payload;
+  try{
+    payload = coletarPayload();
+  }catch(e){
+    alert(e.message);
+    return;
+  }
   if(!payload.item){ alert('Informe o nome do produto.'); return; }
+
   const status = document.getElementById('status');
   status.textContent = 'Enviando...';
   try{
@@ -496,15 +574,19 @@ async function handleSalvar(){
   }
 }
 
-/* ===== Boot ===== */
+/* ===== BOOT ===== */
 document.getElementById('salvar').addEventListener('click', handleSalvar);
 document.getElementById('salvar_m').addEventListener('click', handleSalvar);
 document.getElementById('recalcular').addEventListener('click', atualizarTotais);
 document.getElementById('recalcular_m').addEventListener('click', atualizarTotais);
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closePicker(); closeModal(); }});
+
 document.getElementById('addLinha').addEventListener('click', ()=> novaLinha());
 
+// Linhas iniciais
 novaLinha(); novaLinha(); novaLinha();
+
+// Carrega ingredientes da planilha
 fetchIngredientes();
 </script>
 </body>
