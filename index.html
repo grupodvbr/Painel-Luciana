@@ -33,7 +33,6 @@
   .mini{padding:6px 10px;border-radius:10px}
   .icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff}
 
-  /* Mobile compacto */
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
@@ -42,10 +41,10 @@
     .sticky-actions{position:sticky;bottom:0;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;gap:8px;justify-content:space-between}
     .card{padding:12px}
     table{font-size:.95rem}
-    th:nth-child(5), td:nth-child(5){display:none;} /* oculta Observação no mobile */
+    th:nth-child(5), td:nth-child(5){display:none;}
   }
 
-  /* ----- Menu flutuante (picker) ----- */
+  /* Picker */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
   .sheet{width:100%;max-width:680px;background:#121212;border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--line);padding:12px 12px 16px}
   .sheet .handle{width:44px;height:4px;background:#333;border-radius:999px;margin:6px auto 12px}
@@ -57,7 +56,7 @@
   .search{display:flex;gap:8px}
   .search input{flex:1}
 
-  /* ----- Modal editar ingrediente ----- */
+  /* Modal ingrediente */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
   .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 </style>
@@ -151,7 +150,7 @@
     </div>
   </div>
 
-  <!-- Sheet Picker (menu flutuante) -->
+  <!-- Picker -->
   <div class="overlay" id="picker">
     <div class="sheet">
       <div class="handle"></div>
@@ -166,7 +165,7 @@
     </div>
   </div>
 
-  <!-- Modal editar/criar ingrediente -->
+  <!-- Modal ingrediente -->
   <div class="modal" id="modalIng">
     <div class="box">
       <h3 id="modalTitulo">Editar ingrediente</h3>
@@ -182,8 +181,11 @@
         <div style="grid-column: span 4">
           <label>U.M.</label>
           <select id="ing_um">
-            <option value="g">g</option><option value="kg">kg</option>
-            <option value="ml">ml</option><option value="l">L</option>
+            <option value="">Selecione...</option>
+            <option value="g">g</option>
+            <option value="kg">kg</option>
+            <option value="ml">ml</option>
+            <option value="l">L</option>
             <option value="un">un</option>
           </select>
         </div>
@@ -204,7 +206,8 @@
   </div>
 
 <script>
-  function toast(msg){
+/* ===== Toast ===== */
+function toast(msg){
   let el = document.getElementById('appToast');
   if(!el){
     el = document.createElement('div');
@@ -229,12 +232,12 @@
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0VZDYYK6bU6b7AFBgHLITvoOVrhPYHNeZhVkkssZPfvQ-t8Tti9J1x2DChAk_fuXi/exec'; // <-- troque
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0VZDYYK6bU6b7AFBgHLITvoOVrhPYHNeZhVkkssZPfvQ-t8Tti9J1x2DChAk_fuXi/exec';
 
 /* ===== ESTADO ===== */
 let INGREDIENTES = [];
-let pickerTargetRow = null;   // <tr> alvo ao selecionar no picker
-let modalRowRef = null;       // <tr> alvo ao abrir o modal pelo lápis (edição)
+let pickerTargetRow = null;
+let modalRowRef = null;
 
 /* ===== HELPERS ===== */
 const tbody = document.getElementById('tbody');
@@ -243,7 +246,6 @@ const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',curr
 /* ===== UI DE LINHAS ===== */
 function novaLinha(data={}){
   const tr = document.createElement('tr');
-
   tr.innerHTML = `
     <td>
       <div class="inline">
@@ -266,20 +268,15 @@ function novaLinha(data={}){
     <td class="right subtotal">R$ 0,00</td>
     <td><button class="btn ghost mini btnDel">Remover</button></td>
   `;
-
-  // Se veio unidade, setar
   if (data.um) tr.querySelector('.selUM').value = data.um;
 
-  // Ações
   tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); atualizarTotais(); });
   tr.querySelectorAll('input,select').forEach(el=> el.addEventListener('input', atualizarTotais));
 
-  // Picker abrir
   const openPick = () => { pickerTargetRow = tr; openPicker(); };
   tr.querySelector('.btnPick').addEventListener('click', openPick);
   tr.querySelector('.inpItem').addEventListener('click', openPick);
 
-  // Ícone lápis (editar no mesmo modal)
   tr.querySelector('.btnEditIcon').addEventListener('click', ()=>{
     const info = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
     modalRowRef = tr;
@@ -297,11 +294,8 @@ function aplicarIngredienteNaLinha(tr, ing){
   tr.querySelector('.inpCusto').value= ing.custoUnit || 0;
   tr.querySelector('.ingInfo').textContent = `${ing.codigo||''} • ${ing.obs||''}`;
   tr.dataset.ing = JSON.stringify(ing);
-
-  // Após selecionar: esconder "Buscar", mostrar "✏️"
   tr.querySelector('.btnPick').style.display = 'none';
   tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
-
   atualizarTotais();
 }
 
@@ -332,7 +326,6 @@ function atualizarTotais(){
   });
 
   document.getElementById('custoReceita').textContent = fmtBRL(total);
-
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
 
@@ -340,29 +333,32 @@ function atualizarTotais(){
   const conv = { g:v=>v, kg:v=>v*1000, ml:v=>v, l:v=>v*1000, un:v=>v };
 
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
-    const emBase = conv[unidadeRend](rendimento); // g ou ml
+    const emBase = conv[unidadeRend](rendimento);
     custoPorGMl = total / emBase;
     custoPorKgL = total / (emBase/1000);
   }
-
   document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
   document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
 }
 
-/* ===== BACKEND CALLS (text/plain p/ evitar preflight) ===== */
+/* ===== BACKEND ===== */
 async function fetchIngredientes(){
-  const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now(); // cache-buster
-  const r = await fetch(url, { cache: 'no-store' });
-  const j = await r.json().catch(()=>({ok:false,error:'Resposta não-JSON'}));
-  if(j.ok){
-    INGREDIENTES = Array.isArray(j.data) ? j.data : [];
-    renderListaIng();
-  } else {
-    console.warn('Falha ao carregar ingredientes:', j.error);
-    // mantém lista atual para não sumir visualmente
+  const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now();
+  try{
+    const r = await fetch(url, { cache: 'no-store' });
+    const j = await r.json();
+    if(j.ok){
+      INGREDIENTES = Array.isArray(j.data) ? j.data : [];
+      renderListaIng();
+    }else{
+      console.warn('GET ingredientes não-ok:', j.error);
+      toast('Não foi possível carregar ingredientes.');
+    }
+  }catch(err){
+    console.error('Erro GET ingredientes:', err);
+    toast('Erro ao carregar ingredientes.');
   }
 }
-
 
 async function salvarProduto(payload){
   const res = await fetch(WEBAPP_URL, {
@@ -386,13 +382,17 @@ async function upsertIngrediente(obj){
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
 
-
-/* ===== PICKER (menu flutuante) ===== */
+/* ===== PICKER ===== */
 const picker = document.getElementById('picker');
 const listaIng = document.getElementById('listaIng');
 const buscaIng = document.getElementById('buscaIng');
 
-function openPicker(){ picker.style.display='flex'; renderListaIng(); buscaIng.focus(); }
+function openPicker(){
+  picker.style.display='flex';
+  if(!INGREDIENTES.length){ fetchIngredientes(); }
+  renderListaIng(); 
+  buscaIng.focus();
+}
 function closePicker(){ picker.style.display='none'; }
 
 function renderListaIng(){
@@ -423,7 +423,7 @@ function selectIng(ing){
   closePicker();
 }
 
-/* ===== MODAL editar/criar ingrediente ===== */
+/* ===== MODAL ingrediente ===== */
 const modal = document.getElementById('modalIng');
 const modalTitulo = document.getElementById('modalTitulo');
 const inpCod = document.getElementById('ing_codigo');
@@ -438,7 +438,7 @@ function openModal(ing){
   modalTitulo.textContent = ing ? 'Editar ingrediente' : 'Novo ingrediente';
   inpCod.value = ing?.codigo||'';
   inpNome.value = ing?.nome||'';
-  selUm.value = ing?.um||'g';
+  selUm.value = ing?.um || '';                // <- começa vazio se novo
   inpCusto.value = ing?.custoUnit??'';
   inpObs.value = ing?.obs||'';
 }
@@ -453,44 +453,31 @@ btnSalvarIng.addEventListener('click', async ()=>{
     obs: (inpObs.value||'').trim()
   };
   if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
+  if(!data.um){ alert('Selecione a unidade de medida.'); return; }   // <- obrigatório
 
-  // salva no GAS
   const res = await upsertIngrediente(data);
   if(!res.ok){
     alert('Erro ao salvar ingrediente: ' + (res.error||''));
     return;
   }
 
-  // ---- ATUALIZA LISTA LOCAL IMEDIATAMENTE ----
   const codigo = String(res.codigo || data.codigo || '').trim();
-  const novo = {
-    codigo: codigo || (INGREDIENTES.length ? ('ING-'+(INGREDIENTES.length+1)) : ''), // fallback visual
-    nome: data.nome,
-    um: data.um,
-    custoUnit: data.custoUnit,
-    obs: data.obs
-  };
+  const novo = { codigo: codigo || '', nome: data.nome, um: data.um, custoUnit: data.custoUnit, obs: data.obs };
+
   const i = INGREDIENTES.findIndex(x => String(x.codigo) === codigo && codigo);
   if(i >= 0) INGREDIENTES[i] = novo; else INGREDIENTES.push(novo);
 
-  // se estávamos editando a partir de uma linha da receita, reaplica
-  if(modalRowRef){
-    aplicarIngredienteNaLinha(modalRowRef, novo);
-  }
+  if(modalRowRef){ aplicarIngredienteNaLinha(modalRowRef, novo); }
 
-  // recarrega do servidor sem cache (confirma sincronização), mas sem travar a UI
-  fetchIngredientes();
-
+  fetchIngredientes();  // repuxa do servidor (sem cache)
   closeModal();
-  toast('Ingrediente salvo ✓');        // confirmação visual
+  toast('Ingrediente salvo ✓');
 });
-
 
 /* ===== SALVAR PRODUTO ===== */
 function coletarPayload(){
   const receita = lerTabela();
   const total = receita.reduce((s,i)=>s+i.subtotal,0);
-
   const rendimento = parseFloat(document.getElementById('rendimento').value||'0');
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
 
@@ -501,7 +488,6 @@ function coletarPayload(){
     custoPorGMl = total / emBase;
     custoPorKgL = total / (emBase/1000);
   }
-
   return {
     codigoSistema: document.getElementById('codigoSistema').value.trim(),
     numero: document.getElementById('numero').value.trim(),
@@ -537,13 +523,9 @@ document.getElementById('salvar_m').addEventListener('click', handleSalvar);
 document.getElementById('recalcular').addEventListener('click', atualizarTotais);
 document.getElementById('recalcular_m').addEventListener('click', atualizarTotais);
 document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closePicker(); closeModal(); }});
-
 document.getElementById('addLinha').addEventListener('click', ()=> novaLinha());
 
-// Linhas iniciais
 novaLinha(); novaLinha(); novaLinha();
-
-// Carrega ingredientes da planilha
 fetchIngredientes();
 </script>
 </body>
