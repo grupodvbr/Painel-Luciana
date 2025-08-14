@@ -100,9 +100,18 @@
           <option value="un">un</option>
         </select>
       </div>
-      <div style="grid-column: span 4">
+      <div style="grid-column: span 3">
+        <label>Empresa</label>
+        <select id="empresa"></select>
+        <div class="small muted" id="infoEmpresa"></div>
+      </div>
+      <div style="grid-column: span 3">
         <label>Usuário</label>
         <input id="usuario" placeholder="Seu nome ou login">
+      </div>
+      <div style="grid-column: span 6">
+        <label>OBS.</label>
+        <input id="obs" placeholder="Anotações gerais">
       </div>
       <div style="grid-column: span 4">
         <label>OBS.</label>
@@ -118,6 +127,29 @@
         <div class="small muted">A imagem será enviada ao Google Drive e o link ficará salvo na planilha após a receita.</div>
       </div>
     </div>
+  </div>
+
+  <!-- Preços por empresa -->
+  <div class="card">
+    <div class="grid-2">
+      <div>
+        <strong>Preços por empresa</strong>
+        <div class="small muted">Cadastre preços de venda para cada empresa (multi-preços).</div>
+      </div>
+      <div class="right">
+        <button class="btn ghost" id="addPrecoEmpresa">+ Preço p/ empresa</button>
+      </div>
+    </div>
+    <table id="tblPrecos">
+      <thead>
+        <tr>
+          <th>Empresa</th>
+          <th>Preço de venda (R$)</th>
+          <th class="right">Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbodyPrecos"></tbody>
+    </table>
   </div>
 
   <!-- Receita / ingredientes -->
@@ -253,13 +285,15 @@ function toast(msg){
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyNrF5ubr4VoaIgcGC4uKLyhaoUy8QE1Brlnwokt8LxEiHeJry__eM2uHXJNFnuWWQo/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbztNV7-oaerbsoba3dIHezg6tsu3N98hycK96hv5YTYxbTyMsC4MgU3EL5IpngNA_gq/exec';
 
 /* ===== ESTADO ===== */
 let INGREDIENTES = [];
 let pickerTargetRow = null;   // <tr> alvo ao selecionar no picker
 let modalRowRef = null;       // <tr> alvo ao abrir o modal pelo lápis (edição)
 let FOTO = null;              // {name, type, base64}
+let EMPRESAS = [];            // lista de empresas vinda do backend
+let PRECO_POR_EMPRESA = {};   // { Empresa: precoNumber }
 
 /* ===== HELPERS ===== */
 const tbody = document.getElementById('tbody');
@@ -425,30 +459,34 @@ function atualizarTotais(){
 /* ===== BACKEND CALLS ===== */
 async function fetchIngredientes(){
   const url = WEBAPP_URL + '?action=ingredientes&ts=' + Date.now();
-  try{
-    const r = await fetch(url, { cache: 'no-store' });
-    const j = await r.json();
-    if(j.ok){ INGREDIENTES = Array.isArray(j.data) ? j.data : []; renderListaIng(); }
-    else { toast('Erro ao carregar ingredientes.'); console.warn(j.error); }
-  }catch(e){ toast('Erro ao carregar ingredientes.'); console.error(e); }
+  try{ const r = await fetch(url, { cache: 'no-store' }); const j = await r.json(); if(j.ok){ INGREDIENTES = Array.isArray(j.data) ? j.data : []; renderListaIng(); } else { toast('Erro ao carregar ingredientes.'); console.warn(j.error); } }
+  catch(e){ toast('Erro ao carregar ingredientes.'); console.error(e); }
+}
+async function fetchEmpresas(){
+  try{ const r = await fetch(WEBAPP_URL + '?action=empresas'); const j = await r.json(); if(j.ok && Array.isArray(j.data)){ EMPRESAS = j.data; } else { EMPRESAS = []; }
+  }catch(e){ EMPRESAS = []; }
+  renderEmpresasSelect(); renderPrecosUI();
+}
+function renderEmpresasSelect(){
+  const sel = document.getElementById('empresa'); if(!sel) return; sel.innerHTML = '';
+  if(!EMPRESAS.length){ const opt=document.createElement('option'); opt.value=''; opt.textContent='— selecione —'; sel.appendChild(opt); }
+  EMPRESAS.forEach(nome=>{ const o=document.createElement('option'); o.value=nome; o.textContent=nome; sel.appendChild(o); });
+}
+async function fetchPrecoAnteriorEmpresa(item, empresa){
+  if(!item || !empresa) return null;
+  try{ const r = await fetch(WEBAPP_URL + '?action=produto_lookup&item=' + encodeURIComponent(item) + '&empresa=' + encodeURIComponent(empresa)); const j = await r.json(); if(j.ok) return j.data || null; }catch(e){}
+  return null;
 }
 async function salvarProduto(payload){
   const CURRENT_USER = (document.getElementById('usuario')?.value || localStorage.getItem('AUTH_USER') || '').trim();
   if(CURRENT_USER){ try{ localStorage.setItem('AUTH_USER', CURRENT_USER); }catch(_){} }
-  const res = await fetch(WEBAPP_URL, {
-    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ type:'produto', payload, usuario: CURRENT_USER })
-  });
+  const res = await fetch(WEBAPP_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ type:'produto', payload, usuario: CURRENT_USER }) });
   const txt = await res.text();
   try { return JSON.parse(txt); } catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
-async function upsertIngrediente(obj){
-  const res = await fetch(WEBAPP_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ type:'ingrediente_upsert', ingrediente: obj }) });
-  const txt = await res.text();
-  try { return JSON.parse(txt); } catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
-}
+async function upsertIngrediente(obj){ const res = await fetch(WEBAPP_URL, { method:'POST', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify({ type:'ingrediente_upsert', ingrediente: obj }) }); const txt = await res.text(); try { return JSON.parse(txt); } catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; } }
 
-/* ===== PICKER ===== */
+/* ===== PICKER */ ===== */
 const picker = document.getElementById('picker');
 const listaIng = document.getElementById('listaIng');
 const buscaIng = document.getElementById('buscaIng');
@@ -507,6 +545,7 @@ btnSalvarIng.addEventListener('click', async ()=>{
 /* ===== SALVAR PRODUTO ===== */
 function coletarPayload(){
   const CURRENT_USER = (document.getElementById('usuario')?.value || localStorage.getItem('AUTH_USER') || '').trim();
+  const empresaSel = document.getElementById('empresa')?.value || '';
   const receita = lerTabela();
   if(!receita.length) throw new Error('Adicione pelo menos 1 ingrediente.');
   if(receita.some(r => !r.qtd || r.qtd < 0)) throw new Error('Quantidade deve ser > 0.');
@@ -517,14 +556,18 @@ function coletarPayload(){
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
   let custoPorGMl = 0, custoPorKgL = 0;
   const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
-  if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){
-    const emBase = rendimento * toBase(unidadeRend);
-    custoPorGMl = total / emBase; custoPorKgL = total / (emBase/1000);
-  }
+  if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){ const emBase = rendimento * toBase(unidadeRend); custoPorGMl = total / emBase; custoPorKgL = total / (emBase/1000); }
   const foto = FOTO ? { name: FOTO.name, type: FOTO.type, base64: FOTO.base64 } : null;
-  return { codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend, custoReceita: Number(total.toFixed(4)), custoPorGramaOuML: Number(custoPorGMl.toFixed(6)), custoPorKgOuL: Number(custoPorKgL.toFixed(4)), obs: document.getElementById('obs').value.trim(), receita, usuario: CURRENT_USER || '', foto };
+  return { empresa: empresaSel, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend, custoReceita: Number(total.toFixed(4)), custoPorGramaOuML: Number(custoPorGMl.toFixed(6)), custoPorKgOuL: Number(custoPorKgL.toFixed(4)), obs: document.getElementById('obs').value.trim(), receita, usuario: CURRENT_USER || '', foto, precosPorEmpresa: PRECO_POR_EMPRESA };
 }
 async function handleSalvar(){
+  let payload; try{ payload = coletarPayload(); }catch(e){ alert(e.message); return; }
+  if(!payload.item){ alert('Informe o nome do produto.'); return; }
+  const setStatus = (msg)=>{ const s1=document.getElementById('status'); const s2=document.getElementById('statusDesktop'); if(s1) s1.textContent=msg; if(s2) s2.textContent=msg; };
+  setStatus('Enviando...');
+  try{ const r = await salvarProduto(payload); if(r.ok){ setStatus('Salvo com sucesso na aba "Produtos".'); toast('Produto salvo ✓'); if(r.fotoUrl){ toast('Foto enviada ao Drive ✓'); } } else { setStatus('Erro ao salvar: ' + (r.error||'')); toast('Erro ao salvar'); } }
+  catch(err){ setStatus('Falha de rede: ' + err.message); toast('Falha de rede'); }
+}(){
   let payload; try{ payload = coletarPayload(); }catch(e){ alert(e.message); return; }
   if(!payload.item){ alert('Informe o nome do produto.'); return; }
   const setStatus = (msg)=>{ const s1=document.getElementById('status'); const s2=document.getElementById('statusDesktop'); if(s1) s1.textContent=msg; if(s2) s2.textContent=msg; };
@@ -534,12 +577,13 @@ async function handleSalvar(){
 }
 
 /* ===== PERSISTÊNCIA (rascunho) ===== */
-const DRAFT_KEY = 'RECEITA_DRAFT_V1';
+const DRAFT_KEY = 'RECEITA_DRAFT_V2_MULTI_EMPRESA';
 function getDraft(){
   const receita = lerTabela();
-  return { codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend: document.getElementById('unidadeRend').value, obs: document.getElementById('obs').value.trim(), usuario: document.getElementById('usuario').value.trim(), receita: receita.map(r=>({ item:r.item, qtd:r.qtd, um:r.um, custoUnit:r.custoUnit, obs:r.obs })) };
+  return { empresa: document.getElementById('empresa').value, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend: document.getElementById('unidadeRend').value, obs: document.getElementById('obs').value.trim(), usuario: document.getElementById('usuario').value.trim(), receita: receita.map(r=>({ item:r.item, qtd:r.qtd, um:r.um, custoUnit:r.custoUnit, obs:r.obs })), precosPorEmpresa: PRECO_POR_EMPRESA };
+})) };
 }
-function applyDraft(d){ if(!d) return; document.getElementById('codigoSistema').value=d.codigoSistema||''; document.getElementById('numero').value=d.numero||''; document.getElementById('classificacao').value=d.classificacao||''; document.getElementById('item').value=d.item||''; document.getElementById('rendimento').value=d.rendimento||''; if(d.unidadeRend) document.getElementById('unidadeRend').value=d.unidadeRend; document.getElementById('obs').value=d.obs||''; document.getElementById('usuario').value=d.usuario||''; tbody.innerHTML=''; (d.receita||[]).forEach(l=> novaLinha(l)); if(!(d.receita&&d.receita.length)){ novaLinha(); novaLinha(); novaLinha(); } atualizarTotais(); }
+function applyDraft(d){ if(!d) return; document.getElementById('codigoSistema').value=d.codigoSistema||''; document.getElementById('numero').value=d.numero||''; document.getElementById('classificacao').value=d.classificacao||''; document.getElementById('item').value=d.item||''; document.getElementById('rendimento').value=d.rendimento||''; if(d.unidadeRend) document.getElementById('unidadeRend').value=d.unidadeRend; document.getElementById('obs').value=d.obs||''; document.getElementById('usuario').value=d.usuario||''; if(d.empresa){ const sel=document.getElementById('empresa'); if(sel){ sel.value=d.empresa; }} PRECO_POR_EMPRESA = d.precosPorEmpresa||{}; renderPrecosUI(); tbody.innerHTML=''; (d.receita||[]).forEach(l=> novaLinha(l)); if(!(d.receita&&d.receita.length)){ novaLinha(); novaLinha(); novaLinha(); } atualizarTotais(); }
 function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(getDraft())); }catch(_){} }
 function loadDraft(){ try{ const j = localStorage.getItem(DRAFT_KEY); if(j){ applyDraft(JSON.parse(j)); return true; } }catch(_){} return false; }
 function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} }
@@ -555,6 +599,8 @@ function limparFormulario(){
   document.getElementById('unidadeRend').value='kg';
   document.getElementById('obs').value='';
   document.getElementById('usuario').value='';
+  const sel=document.getElementById('empresa'); if(sel) sel.value='';
+  PRECO_POR_EMPRESA = {}; renderPrecosUI();
   FOTO=null; const f=document.getElementById('fotoProduto'); if(f) f.value='';
   const pw=document.getElementById('fotoPreview'); const pi=document.getElementById('fotoImg'); if(pw){ pw.style.display='none'; } if(pi){ pi.src=''; }
   tbody.innerHTML=''; novaLinha(); novaLinha(); novaLinha(); atualizarTotais();
@@ -575,18 +621,49 @@ document.getElementById('addLinha').addEventListener('click', ()=> { novaLinha()
 
 // Auto-save (debounced)
 let _svT=null; function autoSave(){ clearTimeout(_svT); _svT=setTimeout(saveDraft, 300); }
-['codigoSistema','numero','classificacao','item','rendimento','unidadeRend','obs','usuario']
+['codigoSistema','numero','classificacao','item','rendimento','unidadeRend','obs','usuario','empresa']
   .forEach(id=>{ const el=document.getElementById(id); if(el){ el.addEventListener('input', autoSave); el.addEventListener('change', autoSave); }});
 
 tbody.addEventListener('input', autoSave); tbody.addEventListener('change', autoSave);
 
-// Linhas iniciais ou rascunho
-if(!loadDraft()){ novaLinha(); novaLinha(); novaLinha(); }
+// preços por empresa UI
+function renderPrecosUI(){
+  const tb = document.getElementById('tbodyPrecos'); if(!tb) return; tb.innerHTML='';
+  const empresas = EMPRESAS.length ? EMPRESAS : Object.keys(PRECO_POR_EMPRESA||{});
+  empresas.forEach(nome=>{
+    const tr=document.createElement('tr'); const val = PRECO_POR_EMPRESA[nome] ?? '';
+    tr.innerHTML = `<td>${nome}</td><td><input type="number" step="0.01" inputmode="decimal" value="${val}"></td><td class="right"><button class="btn ghost mini" data-rm>Remover</button></td>`;
+    tr.querySelector('input').addEventListener('input', (e)=>{ const n=parseFloat(String(e.target.value).replace(',','.')); PRECO_POR_EMPRESA[nome]=isNaN(n)?0:n; autoSave(); });
+    tr.querySelector('[data-rm]').addEventListener('click', ()=>{ delete PRECO_POR_EMPRESA[nome]; renderPrecosUI(); autoSave(); });
+    tb.appendChild(tr);
+  });
+}
+document.getElementById('addPrecoEmpresa').addEventListener('click', ()=>{
+  const nome = prompt('Nome da empresa para vincular preço:'); if(!nome) return; if(!EMPRESAS.includes(nome)) EMPRESAS.push(nome); if(!(nome in PRECO_POR_EMPRESA)) PRECO_POR_EMPRESA[nome]=0; renderPrecosUI(); autoSave();
+});
+
+// Linhas iniciais ou rascunho + empresas
+fetchEmpresas().then(()=>{ if(!loadDraft()){ novaLinha(); novaLinha(); novaLinha(); }});
 
 // Preenche usuário do localStorage, se houver
 try{ const u = localStorage.getItem('AUTH_USER'); if(u && !document.getElementById('usuario').value) document.getElementById('usuario').value = u; }catch(_){ }
 
 // Carrega ingredientes da planilha
+fetchIngredientes();
+
+// Ao trocar empresa ou item, tenta buscar preço anterior
+const selEmpresa=document.getElementById('empresa');
+const inpItem=document.getElementById('item');
+async function tryPrefillEmpresa(){ const empresa=selEmpresa?.value; const item=inpItem?.value.trim(); if(!empresa || !item) return; const data=await fetchPrecoAnteriorEmpresa(item, empresa); if(data && data.precoVenda!=null){ document.getElementById('infoEmpresa').textContent = `Preço anterior (${empresa}): R$ ${Number(data.precoVenda||0).toFixed(2).replace('.',',')}`; PRECO_POR_EMPRESA[empresa]=Number(data.precoVenda||0); renderPrecosUI(); } }
+if(selEmpresa) selEmpresa.addEventListener('change', tryPrefillEmpresa);
+if(inpItem) inpItem.addEventListener('change', tryPrefillEmpresa);
+
+/* ===== util tests ===== */
+console.assert(convertQty(1,'kg','g')===1000,'convertQty kg→g');
+console.assert(convertQty(1,'l','ml')===1000,'convertQty l→ml');
+console.assert(toNumberBR('1.234,56')===1234.56,'toNumberBR 1.234,56');
+console.log('Front carregado ✔');
+
 fetchIngredientes();
 
 /* ====== TESTES RÁPIDOS (console) ====== */
