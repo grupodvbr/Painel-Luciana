@@ -31,9 +31,7 @@
   .icon{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--ghost);border-radius:10px;background:transparent;color:#fff}
   .btn-analise { position: absolute; top: 24px; right: 24px; background: var(--brand); color: #fff; padding: 10px 14px; border-radius: 12px; text-decoration: none; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,.3); transition: background 0.2s; }
   .btn-analise:hover { background: #1e4fbf; }
-  /* por padrão, ações móveis escondidas no desktop */
   .sticky-actions{ display:none; }
-  /* Mobile */
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
@@ -44,7 +42,6 @@
     table{font-size:.95rem}
     th:nth-child(5), td:nth-child(5){display:none;}
   }
-  /* Picker */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50}
   .sheet{width:100%;max-width:680px;background:#121212;border-top-left-radius:18px;border-top-right-radius:18px;border:1px solid var(--line);padding:12px 12px 16px}
   .sheet .handle{width:44px;height:4px;background:#333;border-radius:999px;margin:6px auto 12px}
@@ -55,10 +52,8 @@
   .badge{font-size:.75rem;border:1px solid var(--ghost);border-radius:999px;padding:2px 6px}
   .search{display:flex;gap:8px}
   .search input{flex:1}
-  /* Modal ingrediente */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
   .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
-  /* preview da foto */
   .foto-preview{display:flex;gap:12px;align-items:center;margin-top:8px}
   .foto-preview img{height:120px;width:auto;border-radius:12px;border:1px solid var(--line)}
 </style>
@@ -252,16 +247,15 @@ const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDhwp0hhF3wdQcq4krs
 const DEFAULT_EMPRESAS = ['Mercatto','Padaria'];
 
 /* ===== ESTADO ===== */
-let INGREDIENTES = []; // sempre filtrados pela EMPRESA selecionada
+let INGREDIENTES = [];
 let EMPRESAS = [];
-let pickerTargetRow = null;   // <tr> alvo ao selecionar no picker
-let modalRowRef = null;       // <tr> alvo ao abrir o modal pelo lápis (edição)
-let FOTO = null;              // {name, type, base64}
+let pickerTargetRow = null;
+let modalRowRef = null;
+let FOTO = null;
 
 /* ===== HELPERS ===== */
 const tbody = document.getElementById('tbody');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-// conversões entre g↔kg e ml↔L (un: 1:1). 'g' apenas interno
 const FACTOR = { g:1, kg:1000, ml:1, l:1000, un:1 };
 const TYPE   = u => (u==='g'||u==='kg')?'mass' : (u==='ml'||u==='l')?'vol' : 'count';
 function convertQty(qty, from, to){
@@ -271,14 +265,14 @@ function convertQty(qty, from, to){
 }
 function toNumberBR(val){ if(typeof val !== 'string') val = String(val||''); val = val.replace(/\./g, '').replace(',', '.'); const n = parseFloat(val); return isNaN(n) ? 0 : n; }
 
-/* ===== USUÁRIOS (local) ===== */
+/* ===== USUÁRIOS ===== */
 const USERS_KEY = 'AUTH_USERS_V1';
 function getUsers(){ try{ const j=localStorage.getItem(USERS_KEY); const arr=j?JSON.parse(j):[]; return Array.isArray(arr)?arr:[]; }catch(_){ return []; } }
 function setUsers(arr){ try{ localStorage.setItem(USERS_KEY, JSON.stringify(arr)); }catch(_){} }
 function renderUsersDatalist(){ const dl=document.getElementById('listaUsuarios'); if(!dl) return; dl.innerHTML=''; getUsers().forEach(u=>{ const o=document.createElement('option'); o.value=u; dl.appendChild(o); }); }
 function rememberUser(name){ name=String(name||'').trim(); if(!name) return; const list=getUsers(); if(!list.find(x=>x.toLowerCase()===name.toLowerCase())){ list.push(name); setUsers(list); } try{ localStorage.setItem('AUTH_USER', name); }catch(_){} renderUsersDatalist(); }
 
-/* ===== FOTO DO PRODUTO ===== */
+/* ===== FOTO ===== */
 const inpFoto = document.getElementById('fotoProduto');
 const previewWrap = document.getElementById('fotoPreview');
 const previewImg = document.getElementById('fotoImg');
@@ -316,6 +310,23 @@ function novaLinha(data={}){
 
   if (data.um) tr.querySelector('.selUM').value = data.um;
 
+  // >>> se vier do rascunho com "codigo", preserva no dataset para salvar depois
+  if (data.codigo) {
+    const ingLite = {
+      codigo: data.codigo,
+      nome: data.item || '',
+      um: (data.priceUm || data.um || '').toLowerCase(),
+      custoUnit: data.custoUnit || 0,
+      empresa: (document.getElementById('empresa')?.value || '')
+    };
+    tr.dataset.ing = JSON.stringify(ingLite);
+    tr.dataset.priceUm = ingLite.um || '';
+    const info = tr.querySelector('.ingInfo');
+    if(info) info.textContent = `${ingLite.codigo}${ingLite.empresa?(' • '+ingLite.empresa):''} • ${fmtBRL(ingLite.custoUnit||0)}`;
+    tr.querySelector('.btnPick').style.display = 'none';
+    tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
+  }
+
   tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); atualizarTotais(); autoSave(); });
   tr.querySelectorAll('input,select').forEach(el=>{
     el.addEventListener('input', ()=>{ atualizarTotais(); autoSave(); });
@@ -351,15 +362,39 @@ function lerTabela(){
   const linhas = [...tbody.querySelectorAll('tr')];
   return linhas.map(tr=>{
     const info = tr.querySelector('.ingInfo');
-    if(info){ try{ const ing = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null; info.textContent = ing ? `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}` : ''; }catch{ info.textContent = ''; } }
+    let codigo = null, priceUmFromDataset = null;
+
+    try{
+      const ing = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
+      if (ing) {
+        codigo = ing.codigo || null;
+        priceUmFromDataset = (ing.um || '').toLowerCase();
+        if(info) info.textContent = `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
+      } else if(info) {
+        info.textContent = '';
+      }
+    }catch{ if(info) info.textContent = ''; }
+
     const qtd = toNumberBR(tr.querySelector('.inpQtd').value);
     const custo = toNumberBR(tr.querySelector('.inpCusto').value);
     const umLinha  = (tr.querySelector('.selUM').value||'').toLowerCase();
-    const umPreco  = (tr.dataset.priceUm || umLinha || '').toLowerCase();
+    const umPreco  = (tr.dataset.priceUm || priceUmFromDataset || umLinha || '').toLowerCase();
+
     const qtdNaUMdoPreco = convertQty(isNaN(qtd)?0:qtd, umLinha, umPreco);
     const subtotal = (isNaN(qtdNaUMdoPreco)?0:qtdNaUMdoPreco) * (isNaN(custo)?0:custo);
     if(Number.isNaN(qtdNaUMdoPreco)){ if(info) info.textContent = '⚠ U.M. incompatível (qtd vs preço)'; }
-    return { item: tr.querySelector('.inpItem').value.trim(), qtd: isNaN(qtd)?0:qtd, um: umLinha, priceUm: umPreco, custoUnit: isNaN(custo)?0:custo, obs: (tr.querySelector('.inpObs')?.value||'').trim(), subtotal };
+
+    return {
+      // >>> agora salvamos também o CÓDIGO
+      codigo,
+      item: tr.querySelector('.inpItem').value.trim(),
+      qtd: isNaN(qtd)?0:qtd,
+      um: umLinha,
+      priceUm: umPreco,
+      custoUnit: isNaN(custo)?0:custo,
+      obs: (tr.querySelector('.inpObs')?.value||'').trim(),
+      subtotal
+    };
   }).filter(x=>x.item);
 }
 function atualizarTotais(){
@@ -368,14 +403,13 @@ function atualizarTotais(){
   document.getElementById('custoReceita').textContent = fmtBRL(total);
   const rendimento = toNumberBR(document.getElementById('rendimento').value);
   const unidadeRend = document.getElementById('unidadeRend').value.toLowerCase();
-  let custoPorGMl = 0, custoPorKgL = 0; const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1; // kg→g, l→ml
+  let custoPorGMl = 0, custoPorKgL = 0; const toBase = u => u==='kg' ? 1000 : u==='l' ? 1000 : 1;
   if(['g','kg','ml','l'].includes(unidadeRend) && rendimento>0){ const emBase = rendimento * toBase(unidadeRend); custoPorGMl = total / emBase; custoPorKgL = total / (emBase/1000); }
   document.getElementById('custoPorGMl').textContent = isFinite(custoPorGMl) ? 'R$ ' + (custoPorGMl).toFixed(4).replace('.',',') : '—';
   document.getElementById('custoPorKgL').textContent = isFinite(custoPorKgL) ? fmtBRL(custoPorKgL) : '—';
 }
 
-/* ===== BACKEND CALLS ===== */
-// salvar produto
+/* ===== BACKEND ===== */
 async function salvarProduto(payload){
   const CURRENT_USER = (payload?.usuario || document.getElementById('usuario')?.value || localStorage.getItem('AUTH_USER') || '').trim();
   if(CURRENT_USER){ try{ localStorage.setItem('AUTH_USER', CURRENT_USER); }catch(_){} }
@@ -388,7 +422,6 @@ async function salvarProduto(payload){
   try { return JSON.parse(txt); }
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
-
 async function upsertIngrediente(obj){
   const res = await fetch(WEBAPP_URL, {
     method:'POST',
@@ -399,7 +432,6 @@ async function upsertIngrediente(obj){
   try { return JSON.parse(txt); }
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
-
 async function fetchEmpresas(){
   try{
     const r = await fetch(WEBAPP_URL + '?action=empresas');
@@ -414,13 +446,11 @@ async function fetchEmpresas(){
   }
   renderEmpresasSelect();
 }
-
 function renderEmpresasSelect(){
   const sel = document.getElementById('empresa'); if(!sel) return; sel.innerHTML = '';
   const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— selecione —'; sel.appendChild(opt0);
   EMPRESAS.forEach(nome=>{ const o=document.createElement('option'); o.value=nome; o.textContent=nome; sel.appendChild(o); });
 }
-
 async function fetchIngredientes(empresa){
   const url = WEBAPP_URL + '?action=ingredientes&empresa=' + encodeURIComponent(empresa||'') + '&ts=' + Date.now();
   try{
@@ -440,7 +470,6 @@ async function fetchIngredientes(empresa){
     console.error(e);
   }
 }
-
 function updateCostsForExistingRows(){
   const byCodigo = new Map(); const byNome = new Map();
   INGREDIENTES.forEach(x=>{ if(x.codigo) byCodigo.set(String(x.codigo).trim().toLowerCase(), x); if(x.nome) byNome.set(String(x.nome).trim().toLowerCase(), x); });
@@ -463,7 +492,6 @@ function openPicker(){ picker.style.display='flex'; renderListaIng(); buscaIng.f
 function closePicker(){ picker.style.display='none'; }
 function renderListaIng(){
   const q = (buscaIng.value||'').toLowerCase();
-  // INGREDIENTES já vêm filtrados por empresa do servidor
   const arr = INGREDIENTES.filter(x=> (x.nome||'').toLowerCase().includes(q) || String(x.codigo||'').toLowerCase().includes(q) );
   listaIng.innerHTML = '';
   if(!arr.length){
@@ -505,7 +533,6 @@ const inpNome = document.getElementById('ing_nome');
 const selUm = document.getElementById('ing_um');
 const inpCusto = document.getElementById('ing_custo');
 const inpObs = document.getElementById('ing_obs');
-// cria/pega select Empresa no modal (se não existir, cria logo após Nome)
 let selIngEmpresa = document.getElementById('ing_empresa');
 if(!selIngEmpresa){
   const elNome = inpNome.closest('div[style*="grid-column"]');
@@ -578,11 +605,23 @@ async function handleSalvar(){
   catch(err){ setStatus('Falha de rede: ' + err.message); toast('Falha de rede'); }
 }
 
-/* ===== PERSISTÊNCIA (rascunho) ===== */
+/* ===== RASCUNHO ===== */
 const DRAFT_KEY = 'RECEITA_DRAFT_EMPRESA_V1';
 function getDraft(){
   const receita = lerTabela();
-  return { empresa: document.getElementById('empresa').value, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend: document.getElementById('unidadeRend').value, obs: document.getElementById('obs').value.trim(), usuario: document.getElementById('usuario').value.trim(), receita: receita.map(r=>({ item:r.item, qtd:r.qtd, um:r.um, custoUnit:r.custoUnit, obs:r.obs })) };
+  return {
+    empresa: document.getElementById('empresa').value,
+    codigoSistema: document.getElementById('codigoSistema').value.trim(),
+    numero: document.getElementById('numero').value.trim(),
+    classificacao: document.getElementById('classificacao').value.trim(),
+    item: document.getElementById('item').value.trim(),
+    rendimento: document.getElementById('rendimento').value.trim(),
+    unidadeRend: document.getElementById('unidadeRend').value,
+    obs: document.getElementById('obs').value.trim(),
+    usuario: document.getElementById('usuario').value.trim(),
+    // >>> agora guardamos também codigo e priceUm
+    receita: receita.map(r=>({ codigo:r.codigo||null, item:r.item, qtd:r.qtd, um:r.um, priceUm:r.priceUm, custoUnit:r.custoUnit, obs:r.obs }))
+  };
 }
 function applyDraft(d){
   if(!d) return;
@@ -605,7 +644,7 @@ function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(getDra
 function loadDraft(){ try{ const j = localStorage.getItem(DRAFT_KEY); if(j){ applyDraft(JSON.parse(j)); return true; } }catch(_){} return false; }
 function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} }
 
-/* ===== LIMPAR FORM ===== */
+/* ===== LIMPAR ===== */
 function limparFormulario(){
   if(!confirm('Limpar todos os campos?')) return;
   document.getElementById('codigoSistema').value='';
@@ -635,7 +674,6 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closePicker();
 
 document.getElementById('addLinha').addEventListener('click', ()=> { novaLinha(); saveDraft(); });
 
-// Auto-save (debounced) e gatilho ao mudar empresa
 let _svT=null; function autoSave(){ clearTimeout(_svT); _svT=setTimeout(saveDraft, 300); }
 ['codigoSistema','numero','classificacao','item','rendimento','unidadeRend','obs','usuario','empresa']
   .forEach(id=>{
@@ -650,14 +688,12 @@ let _svT=null; function autoSave(){ clearTimeout(_svT); _svT=setTimeout(saveDraf
   });
 
 tbody.addEventListener('input', autoSave); tbody.addEventListener('change', autoSave);
-// lembra usuário quando alterado
 const usuarioInput=document.getElementById('usuario'); if(usuarioInput){ usuarioInput.addEventListener('change', ()=>{ rememberUser(usuarioInput.value); }); }
 
 (async function boot(){
   await fetchEmpresas();
   const sel=document.getElementById('empresa'); if(sel && !sel.value && EMPRESAS.length){ sel.value = EMPRESAS[0]; }
   await fetchIngredientes(sel?.value||'');
-  // usuários: montar lista e preencher o último usado
   renderUsersDatalist();
   try{ const savedUser = localStorage.getItem('AUTH_USER'); if(savedUser && !document.getElementById('usuario').value){ document.getElementById('usuario').value = savedUser; } }catch(_){ }
   if(!loadDraft()){ novaLinha(); novaLinha(); novaLinha(); }
