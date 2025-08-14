@@ -15,7 +15,7 @@
   label{font-size:.85rem;color:var(--muted)}
   input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#0f0f10;color:#fff}
   table{width:100%;border-collapse:collapse;margin-top:8px}
-  th,td{border:1px solid var(--line);padding:8px;text-align:left}
+  th,td{border:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
   th{background:#000}
   .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:var(--brand);color:#fff}
   .btn.ghost{background:transparent;border:1px solid var(--ghost)}
@@ -23,18 +23,20 @@
   .right{text-align:right}
   .muted{opacity:.85}
   .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--ghost);font-size:.8rem;background:#111}
-  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .small{font-size:.9rem}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#0f172a;border:1px solid #334155;color:#cbd5e1;font-size:.75rem}
   .link{cursor:pointer;color:#93c5fd}
 
+  /* Destaque melhor preço */
+  .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
+  .best::after{content:" 💚";}
+
   /* Modal de Detalhes */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
-  .modal .box{width:100%;max-width:980px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
   .modal header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
   .foto{width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 
-  /* tabela responsiva no modal */
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
 
   /* mobile */
@@ -53,11 +55,11 @@
         <label>Empresa</label>
         <select id="fEmpresa"><option value="">(Todas)</option></select>
       </div>
-      <div style="grid-column: span 4">
+      <div style="grid-column: span 5">
         <label>Buscar</label>
         <input id="fBusca" placeholder="Item, classificação, código...">
       </div>
-      <div style="grid-column: span 3;align-self:end" class="right">
+      <div style="grid-column: span 2;align-self:end" class="right">
         <button class="btn ghost" id="btnAtualizar">Atualizar</button>
       </div>
     </div>
@@ -94,7 +96,7 @@
           <div id="mSub" class="small muted"></div>
         </div>
         <div class="inline">
-          <label class="small">Comparar com</label>
+          <label class="small">Empresas</label>
           <select id="mCompare"></select>
           <button class="btn ghost" id="mFechar">Fechar</button>
         </div>
@@ -111,54 +113,56 @@
 
       <div class="tbl-wrap">
         <table id="tblDet">
-          <thead>
-            <tr>
-              <th>Ingrediente</th>
-              <th class="right">Qtd</th>
-              <th>U.M.</th>
-              <th class="right">Preço (empresa)</th>
-              <th class="right">Preço (comparar)</th>
-              <th class="right">Diferença</th>
-            </tr>
-          </thead>
+          <thead id="theadDet"></thead>
           <tbody id="tbodyDet"></tbody>
         </table>
       </div>
 
-      <div class="row" style="margin-top:12px">
-        <div style="grid-column: span 6">
-          <span class="pill" id="mTotalA"></span>
-        </div>
-        <div style="grid-column: span 6" class="right">
-          <span class="pill" id="mTotalB"></span>
-        </div>
-      </div>
+      <div id="mTotals" class="row" style="margin-top:12px"></div>
+      <div id="mExplain" class="small muted" style="margin-top:6px"></div>
     </div>
   </div>
 
 <script>
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDhwp0hhF3wdQcq4krsXqBSCxgkE5qC_-21B0lwYgUnbvkt3w6TnUwhgZPiFDloWt2/exec'; // <<< ajuste
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDhwp0hhF3wdQcq4krsXqBSCxgkE5qC_-21B0lwYgUnbvkt3w6TnUwhgZPiFDloWt2/exec';
 
 /* ===== ESTADO ===== */
-let PRODUTOS = [];         // todos os produtos (de todas as empresas)
-let ING_TODOS = [];        // todos os ingredientes (de todas as empresas)
-let EMPRESAS = [];         // lista de empresas únicas
+let PRODUTOS = [];
+let ING_TODOS = [];
+let EMPRESAS = [];
 let EMPRESA_ATUAL = '';
 
 /* ===== HELPERS ===== */
 const tbodyR = document.getElementById('tbodyReceitas');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
 const FACTOR = { g:1, kg:1000, ml:1, l:1000, un:1 };
 const TYPE   = u => (u==='g'||u==='kg')?'mass' : (u==='ml'||u==='l')?'vol' : 'count';
-function convertQty(qty, from, to){ from=(from||'').toLowerCase(); to=(to||'').toLowerCase(); if(!FACTOR[from]||!FACTOR[to]) return qty; if(TYPE(from)!==TYPE(to)) return NaN; return qty*(FACTOR[from]/FACTOR[to]); }
+function convertQty(qty, from, to){
+  from=(from||'').toLowerCase(); to=(to||'').toLowerCase();
+  if(!FACTOR[from]||!FACTOR[to]) return qty;
+  if(TYPE(from)!==TYPE(to)) return NaN;
+  return qty*(FACTOR[from]/FACTOR[to]);
+}
 function norm(s){ return String(s||'').trim().toLowerCase(); }
+
+/* Exibir imagens do Drive */
+function driveImgSrc(uOrId){
+  if(!uOrId) return '';
+  if(/^[a-zA-Z0-9_-]{20,}$/.test(uOrId)) return `https://drive.google.com/uc?export=view&id=${uOrId}`;
+  const m = String(uOrId).match(/\/d\/([^/]+)/) || String(uOrId).match(/[?&]id=([^&]+)/);
+  const id = m && m[1];
+  return id ? `https://drive.google.com/uc?export=view&id=${id}` : uOrId;
+}
 
 /* ===== GAS ===== */
 async function apiGet(path){ const r = await fetch(WEBAPP_URL+path, {cache:'no-store'}); return r.json(); }
 async function carregarEmpresas(){
-  // tenta endpoint dedicado; senão deduz de produtos+ingredientes
-  try{ const j = await apiGet('?action=empresas&ts='+Date.now()); if(j.ok && Array.isArray(j.data) && j.data.length){ EMPRESAS = j.data.filter(Boolean); return; } }catch(_){ }
+  try{
+    const j = await apiGet('?action=empresas&ts='+Date.now());
+    if(j.ok && Array.isArray(j.data) && j.data.length){ EMPRESAS = j.data.filter(Boolean); return; }
+  }catch(_){}
   const [p,i] = await Promise.all([ apiGet('?action=produtos&ts='+Date.now()), apiGet('?action=ingredientes&ts='+Date.now()) ]);
   const set = new Set();
   if(p.ok) (p.data||[]).forEach(r=>{ if(r.empresa) set.add(r.empresa); });
@@ -166,17 +170,15 @@ async function carregarEmpresas(){
   EMPRESAS = [...set];
 }
 async function carregarDados(){
-  const [p,i] = await Promise.all([
-    apiGet('?action=produtos&ts='+Date.now()),
-    apiGet('?action=ingredientes&ts='+Date.now())
-  ]);
+  const [p,i] = await Promise.all([ apiGet('?action=produtos&ts='+Date.now()), apiGet('?action=ingredientes&ts='+Date.now()) ]);
   PRODUTOS = p.ok ? (p.data||[]) : [];
   ING_TODOS = i.ok ? (i.data||[]) : [];
 }
 
 /* ===== RENDER LISTA ===== */
 function renderEmpresasSelect(){
-  const sel = document.getElementById('fEmpresa'); sel.innerHTML = '<option value="">(Todas)</option>' + EMPRESAS.map(e=>`<option value="${e}">${e}</option>`).join('');
+  const sel = document.getElementById('fEmpresa');
+  sel.innerHTML = '<option value="">(Todas)</option>' + EMPRESAS.map(e=>`<option value="${e}">${e}</option>`).join('');
   if(EMPRESA_ATUAL){ sel.value = EMPRESA_ATUAL; }
 }
 function renderTabela(){
@@ -205,12 +207,12 @@ function renderTabela(){
       <td>${r.usuario||''}</td>`;
     tbodyR.appendChild(tr);
   });
-  // click nos itens
   tbodyR.querySelectorAll('.link').forEach(a=> a.addEventListener('click', (e)=>{
     const idx = Number(e.target.dataset.idx);
     const listaFiltrada = (PRODUTOS||[]).filter(r=>{
       const empOk = !EMPRESA_ATUAL || norm(r.empresa)===norm(EMPRESA_ATUAL);
-      const bOk = !busca || [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> String(v||'').toLowerCase().includes(busca));
+      const bOk = !norm(document.getElementById('fBusca').value) ||
+        [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> String(v||'').toLowerCase().includes(norm(document.getElementById('fBusca').value)));
       return empOk && bOk;
     });
     const item = listaFiltrada[idx];
@@ -221,7 +223,6 @@ function renderTabela(){
 
 /* ===== COMPARAÇÃO ===== */
 function indexIngredientesPorEmpresa(){
-  // retorna { empresa -> { key -> ingrediente } }, key por código se houver, senão nome
   const map = {};
   (ING_TODOS||[]).forEach(x=>{
     const emp = x.empresa||''; if(!map[emp]) map[emp] = {};
@@ -236,16 +237,6 @@ function acharIng(map, empresa, recItem){
   const m = map[empresa]||{};
   return (keyCod && m[keyCod]) || m[keyNome] || null;
 }
-function custoLinhaEmEmpresa(recItem, ingEmpresa){
-  if(!ingEmpresa) return {unit:0, subtotal:0};
-  const qtd = Number(recItem.qtd||0);
-  const umLinha = String(recItem.um||'').toLowerCase();
-  const umPreco = String(ingEmpresa.um||'').toLowerCase();
-  const qtdConv = convertQty(qtd, umLinha, umPreco);
-  const unit = Number(ingEmpresa.custoUnit||0);
-  const subtotal = (isNaN(qtdConv)?0:qtdConv) * unit;
-  return {unit, subtotal};
-}
 
 /* ===== MODAL ===== */
 const modal = document.getElementById('modal');
@@ -255,43 +246,106 @@ mFechar.addEventListener('click', ()=> modal.style.display='none');
 function abrirModal(prod){
   const map = indexIngredientesPorEmpresa();
   const baseEmp = prod.empresa || EMPRESA_ATUAL || '';
-  // montar seletor de comparação
+
+  // popula select (padrão = Todas)
   const cmpSel = document.getElementById('mCompare');
-  cmpSel.innerHTML = EMPRESAS.filter(e=>e!==baseEmp).map(e=>`<option value="${e}">${e}</option>`).join('');
-  if(!cmpSel.value && cmpSel.firstChild) cmpSel.selectedIndex = 0;
+  const opts = ['<option value="__ALL__">(Todas)</option>']
+    .concat(EMPRESAS.map(e=>`<option value="${e}">${e}</option>`));
+  cmpSel.innerHTML = opts.join('');
+  cmpSel.value = '__ALL__';
 
   function render(){
-    const compararCom = cmpSel.value || '';
+    // quais empresas mostrar
+    const val = cmpSel.value;
+    let empresasToShow = val==='__ALL__' ? [...EMPRESAS] : [val];
+    // garante que a empresa base também apareça (se não estiver na lista)
+    if(!empresasToShow.includes(baseEmp)) empresasToShow.unshift(baseEmp);
+
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
-    document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa: ${baseEmp} • Nº ${prod.numero||''}`;
+    document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
+
     const foto = document.getElementById('mFoto');
-    if(prod.fotoUrl){ foto.src = prod.fotoUrl; foto.style.display='block'; } else { foto.style.display='none'; }
+    const src = driveImgSrc(prod.fotoId || prod.fotoUrl);
+    if(src){ foto.onerror=()=>{foto.style.display='none'}; foto.src=src; foto.style.display='block'; }
+    else { foto.style.display='none'; }
 
     const receita = Array.isArray(prod.receita) ? prod.receita : [];
+    const thead = document.getElementById('theadDet');
     const tbody = document.getElementById('tbodyDet');
+    thead.innerHTML = '';
     tbody.innerHTML = '';
 
-    let totA=0, totB=0;
+    // Cabeçalho dinâmico
+    const thCols = ['Ingrediente','Qtd (receita)','U.M.'].concat(empresasToShow.map(e=>`Preço • ${e}`));
+    const trH = document.createElement('tr');
+    thCols.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; if(h.startsWith('Preço')) th.className='right'; trH.appendChild(th); });
+    thead.appendChild(trH);
+
+    // Totais por empresa
+    const totais = {}; empresasToShow.forEach(e=> totais[e]=0);
+
+    // Linhas
     receita.forEach(r=>{
-      const ingA = acharIng(map, baseEmp, r);
-      const ingB = compararCom ? acharIng(map, compararCom, r) : null;
-      const a = custoLinhaEmEmpresa(r, ingA);
-      const b = custoLinhaEmEmpresa(r, ingB);
-      totA += a.subtotal; totB += b.subtotal;
+      // para cada empresa, calcula unit/subtotal considerando conversão
+      const porEmpresa = empresasToShow.map(emp=>{
+        const ing = acharIng(map, emp, r);
+        if(!ing) return {emp, unit:null, subtotal:null, umPreco:null, convTxt:'Sem cadastro'};
+        const umPreco = String(ing.um||'').toLowerCase();
+        const umLinha = String(r.um||'').toLowerCase();
+        const qtd = Number(r.qtd||0);
+        const qConv = convertQty(qtd, umLinha, umPreco);
+        const unit = Number(ing.custoUnit||0);
+        const sub = (isNaN(qConv)?0:qConv)*unit;
+        if(!isNaN(sub)) totais[emp]+=sub;
+        const convTxt = isNaN(qConv)
+          ? `Unidades incompatíveis (${umLinha} → ${umPreco})`
+          : `Conversão: ${qtd} ${umLinha} → ${qConv.toFixed(4)} ${umPreco} • subtotal = ${qConv.toFixed(4)} × ${fmtBRL(unit)}`;
+        return {emp, unit, subtotal: isNaN(sub)?null:sub, umPreco, convTxt};
+      });
+
+      // descobre o menor subtotal disponível
+      const validos = porEmpresa.filter(x=>x.subtotal!=null);
+      const minVal = validos.length ? Math.min(...validos.map(x=>x.subtotal)) : null;
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${r.item||''}</td>
         <td class="right">${Number(r.qtd||0)}</td>
         <td>${(r.um||'').toUpperCase()}</td>
-        <td class="right">${ingA?fmtBRL(a.unit):'—'}</td>
-        <td class="right">${ingB?fmtBRL(b.unit):'—'}</td>
-        <td class="right">${ingA&&ingB?fmtBRL(b.unit - a.unit):'—'}</td>`;
+      `;
+      porEmpresa.forEach(obj=>{
+        const td = document.createElement('td');
+        td.className = 'right';
+        if(obj.subtotal==null){
+          td.textContent = '—';
+          td.title = obj.convTxt || '';
+        }else{
+          td.title = obj.convTxt || '';
+          td.textContent = `${fmtBRL(obj.unit)} • ${fmtBRL(obj.subtotal)}`;
+          if(minVal!=null && obj.subtotal===minVal) td.classList.add('best');
+        }
+        tr.appendChild(td);
+      });
       tbody.appendChild(tr);
     });
 
-    document.getElementById('mResumo').textContent = `Rendimento: ${prod.rendimento||''} ${(prod.unidadeRend||'').toUpperCase()} • Itens: ${Array.isArray(prod.receita)?prod.receita.length:0}`;
-    document.getElementById('mTotalA').textContent = `Total na empresa (${baseEmp}): ${fmtBRL(totA)}`;
-    document.getElementById('mTotalB').textContent = compararCom ? `Total na empresa (${compararCom}): ${fmtBRL(totB)}` : 'Selecione uma empresa para comparar';
+    // Totais (pills)
+    const totalsWrap = document.getElementById('mTotals');
+    totalsWrap.innerHTML = '';
+    empresasToShow.forEach(emp=>{
+      const div = document.createElement('div');
+      div.style.gridColumn = 'span 6';
+      div.innerHTML = `<span class="pill">Total na empresa (${emp}): <strong>${fmtBRL(totais[emp]||0)}</strong></span>`;
+      totalsWrap.appendChild(div);
+    });
+
+    document.getElementById('mResumo').textContent =
+      `Rendimento: ${prod.rendimento||''} ${(prod.unidadeRend||'').toUpperCase()} • Itens: ${Array.isArray(prod.receita)?prod.receita.length:0}`;
+
+    document.getElementById('mExplain').textContent =
+      'Cálculo: para cada empresa, convertemos a quantidade da receita para a unidade do preço do ingrediente (kg↔g, L↔ml, un 1:1). '+
+      'Fórmula do subtotal por empresa: subtotal = (quantidade convertida) × (preço unitário da empresa). '+
+      'A célula destacada (💚) indica em qual empresa aquele ingrediente está mais barato para a quantidade da receita.';
   }
 
   render();
@@ -311,9 +365,14 @@ async function boot(){
 }
 
 // Eventos filtros
- document.getElementById('btnAtualizar').addEventListener('click', async ()=>{ await carregarDados(); renderTabela(); });
- document.getElementById('fEmpresa').addEventListener('change', renderTabela);
- document.getElementById('fBusca').addEventListener('input', renderTabela);
+document.getElementById('btnAtualizar').addEventListener('click', async ()=>{
+  const btn = document.getElementById('btnAtualizar');
+  btn.disabled = true; btn.textContent = 'Atualizando...';
+  await carregarDados(); renderTabela();
+  btn.disabled = false; btn.textContent = 'Atualizar';
+});
+document.getElementById('fEmpresa').addEventListener('change', renderTabela);
+document.getElementById('fBusca').addEventListener('input', renderTabela);
 
 boot();
 </script>
