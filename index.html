@@ -368,6 +368,30 @@ function atualizarTotais(){
 }
 
 /* ===== BACKEND CALLS ===== */
+// --- chamadas ao GAS (faltavam no arquivo; erro "salvarProduto is not defined")
+async function salvarProduto(payload){
+  const CURRENT_USER = (payload?.usuario || document.getElementById('usuario')?.value || localStorage.getItem('AUTH_USER') || '').trim();
+  if(CURRENT_USER){ try{ localStorage.setItem('AUTH_USER', CURRENT_USER); }catch(_){} }
+  const res = await fetch(WEBAPP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ type:'produto', payload, usuario: CURRENT_USER })
+  });
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
+}
+
+async function upsertIngrediente(obj){
+  const res = await fetch(WEBAPP_URL, {
+    method:'POST',
+    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+    body: JSON.stringify({ type:'ingrediente_upsert', ingrediente: obj })
+  });
+  const txt = await res.text();
+  try { return JSON.parse(txt); }
+  catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
+}
 async function fetchEmpresas(){
   try{ const r = await fetch(WEBAPP_URL + '?action=empresas'); const j = await r.json(); if(j.ok && Array.isArray(j.data) && j.data.length){ EMPRESAS = j.data; } else { EMPRESAS = DEFAULT_EMPRESAS.slice(); } }
   catch(e){ EMPRESAS = DEFAULT_EMPRESAS.slice(); }
