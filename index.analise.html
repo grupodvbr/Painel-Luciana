@@ -27,6 +27,7 @@
 
   /* destaque melhor preço */
   .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
+  .best::after{content:" 💚";}
 
   /* Modal */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
@@ -145,6 +146,11 @@ function driveImgSrc(uOrId){
   const id = m && m[1];
   return id ? `https://drive.google.com/uc?export=view&id=${id}` : uOrId;
 }
+function qtyUmFrom(r){
+  const qtd = Number(r.qtd ?? r.quantidade ?? r.qtdReceita ?? 0);
+  const um  = String(r.um ?? r.unidade ?? r.unidadeReceita ?? '').toLowerCase();
+  return {qtd, um};
+}
 
 /* ===== GAS ===== */
 async function apiGet(path){
@@ -230,9 +236,10 @@ async function abrirModal(prod){
   cmpSel.value = '__ALL__';
 
   async function fetchComparativo(rec){ // usa preferencialmente o CÓDIGO
+    const {qtd, um} = qtyUmFrom(rec);
     const codigo = rec.codigo ? `codigo=${encodeURIComponent(rec.codigo)}` : '';
     const nome   = !rec.codigo ? `nome=${encodeURIComponent(rec.item||'')}` : '';
-    const qs = (codigo || nome) + `&qtd=${encodeURIComponent(rec.qtd||0)}&um=${encodeURIComponent(String(rec.um||'').toLowerCase())}`;
+    const qs = (codigo || nome) + `&qtd=${encodeURIComponent(qtd||0)}&um=${encodeURIComponent(um)}`;
     const j = await apiGet(`?action=comparar_ingrediente&${qs}&ts=${Date.now()}`);
     return j.ok ? j.data : null;
   }
@@ -270,11 +277,12 @@ async function abrirModal(prod){
     // Totais
     const totais = {}; empresasToShow.forEach(e=> totais[e]=0);
 
-    // Busca comparativos via GAS (por CÓDIGO sempre que houver)
+    // Comparativos (por item)
     const comps = await Promise.all(receita.map(r=>fetchComparativo(r)));
 
     receita.forEach((r, idx)=>{
       const comp = comps[idx];
+      const {qtd, um} = qtyUmFrom(r);
       const porEmpresa = (comp?.empresas||[]).filter(x=> empresasToShow.includes(x.empresa));
 
       const validos = porEmpresa.filter(x=> x.subtotal!=null);
@@ -282,9 +290,9 @@ async function abrirModal(prod){
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}</td>
-        <td class="right">${Number(r.qtd||0)}</td>
-        <td>${(r.um||'').toUpperCase()}</td>
+        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}${!comp?' <span class="small muted">• sem cadastro nas empresas</span>':''}</td>
+        <td class="right">${Number(qtd||0)}</td>
+        <td>${(um||'').toUpperCase()}</td>
       `;
 
       empresasToShow.forEach(emp=>{
@@ -292,11 +300,12 @@ async function abrirModal(prod){
         const td = document.createElement('td'); td.className='right';
         if(!x){
           td.textContent='—';
+          td.title = comp ? 'Sem cadastro desta empresa para este ingrediente' : 'Ingrediente não encontrado (verifique código/nome)';
         }else{
           if(x.subtotal!=null) totais[emp]+=x.subtotal;
           td.title = (x.qtdConvertida==null)
             ? `Sem conversão (unidades incompatíveis)`
-            : `Conversão: ${r.qtd} ${(r.um||'').toLowerCase()} → ${x.qtdConvertida.toFixed(4)} ${x.umPreco} • subtotal = ${x.qtdConvertida.toFixed(4)} × ${fmtBRL(x.custoUnit)}`;
+            : `Conversão: ${qtd} ${(um||'').toLowerCase()} → ${x.qtdConvertida.toFixed(4)} ${x.umPreco} • subtotal = ${x.qtdConvertida.toFixed(4)} × ${fmtBRL(x.custoUnit)}`;
           td.textContent = (x.subtotal==null)
             ? `${fmtBRL(x.custoUnit)} • —`
             : `${fmtBRL(x.custoUnit)} • ${fmtBRL(x.subtotal)}`;
@@ -323,7 +332,7 @@ async function abrirModal(prod){
 
     document.getElementById('mExplain').textContent =
       'Cálculo por empresa: convertemos a quantidade da receita para a unidade do preço do ingrediente (kg↔g, L↔ml, un 1:1). '+
-      'Subtotal = (quantidade convertida) × (preço unitário da empresa). A célula destacada indica onde este ingrediente fica mais barato para a quantidade informada.';
+      'Subtotal = (quantidade convertida) × (preço unitário da empresa). A célula destacada (💚) indica onde este ingrediente fica mais barato para a quantidade informada.';
   }
 
   await render();
