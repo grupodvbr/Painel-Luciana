@@ -106,8 +106,9 @@
         <div class="small muted" id="infoEmpresa"></div>
       </div>
       <div style="grid-column: span 3">
-        <label>Usuário</label>
-        <input id="usuario" placeholder="Seu nome ou login">
+        <label>Usuário <span class="small muted">(selecione ou digite)</span></label>
+        <input id="usuario" list="listaUsuarios" placeholder="Seu nome ou login" autocomplete="off">
+        <datalist id="listaUsuarios"></datalist>
       </div>
       <div style="grid-column: span 6">
         <label>OBS.</label>
@@ -248,7 +249,7 @@ function toast(msg){
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDhwp0hhF3wdQcq4krsXqBSCxgkE5qC_-21B0lwYgUnbvkt3w6TnUwhgZPiFDloWt2/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbztNV7-oaerbsoba3dIHezg6tsu3N98hycK96hv5YTYxbTyMsC4MgU3EL5IpngNA_gq/exec';
 const DEFAULT_EMPRESAS = ['Mercatto','Padaria'];
 
 /* ===== ESTADO ===== */
@@ -270,6 +271,13 @@ function convertQty(qty, from, to){
   return qty * (FACTOR[from] / FACTOR[to]);
 }
 function toNumberBR(val){ if(typeof val !== 'string') val = String(val||''); val = val.replace(/\./g, '').replace(',', '.'); const n = parseFloat(val); return isNaN(n) ? 0 : n; }
+
+/* ===== USUÁRIOS (local) ===== */
+const USERS_KEY = 'AUTH_USERS_V1';
+function getUsers(){ try{ const j=localStorage.getItem(USERS_KEY); const arr=j?JSON.parse(j):[]; return Array.isArray(arr)?arr:[]; }catch(_){ return []; } }
+function setUsers(arr){ try{ localStorage.setItem(USERS_KEY, JSON.stringify(arr)); }catch(_){} }
+function renderUsersDatalist(){ const dl=document.getElementById('listaUsuarios'); if(!dl) return; dl.innerHTML=''; getUsers().forEach(u=>{ const o=document.createElement('option'); o.value=u; dl.appendChild(o); }); }
+function rememberUser(name){ name=String(name||'').trim(); if(!name) return; const list=getUsers(); if(!list.find(x=>x.toLowerCase()===name.toLowerCase())){ list.push(name); setUsers(list); } try{ localStorage.setItem('AUTH_USER', name); }catch(_){} renderUsersDatalist(); }
 
 /* ===== FOTO DO PRODUTO ===== */
 const inpFoto = document.getElementById('fotoProduto');
@@ -504,7 +512,7 @@ async function handleSalvar(){
   const payload = { empresa: empresaSel, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend, custoReceita: Number(total.toFixed(4)), custoPorGramaOuML: Number(custoPorGMl.toFixed(6)), custoPorKgOuL: Number(custoPorKgL.toFixed(4)), obs: document.getElementById('obs').value.trim(), receita, usuario: CURRENT_USER || '', foto };
   const setStatus = (msg)=>{ const s1=document.getElementById('status'); const s2=document.getElementById('statusDesktop'); if(s1) s1.textContent=msg; if(s2) s2.textContent=msg; };
   setStatus('Enviando...');
-  try{ const r = await salvarProduto(payload); if(r.ok){ setStatus('Salvo com sucesso na aba "Produtos".'); toast('Produto salvo ✓'); if(r.fotoUrl){ toast('Foto enviada ao Drive ✓'); } clearDraft(); } else { setStatus('Erro ao salvar: ' + (r.error||'')); toast('Erro ao salvar'); } }
+  try{ const r = await salvarProduto(payload); if(r.ok){ setStatus('Salvo com sucesso na aba "Produtos".'); toast('Produto salvo ✓'); $1rememberUser(CURRENT_USER); clearDraft(); } else { setStatus('Erro ao salvar: ' + (r.error||'')); toast('Erro ao salvar'); } }
   catch(err){ setStatus('Falha de rede: ' + err.message); toast('Falha de rede'); }
 }
 
@@ -543,12 +551,16 @@ let _svT=null; function autoSave(){ clearTimeout(_svT); _svT=setTimeout(saveDraf
   .forEach(id=>{ const el=document.getElementById(id); if(el){ el.addEventListener('input', autoSave); el.addEventListener('change', async (e)=>{ if(id==='empresa'){ await fetchIngredientes(e.target.value); } autoSave(); }); }});
 
 tbody.addEventListener('input', autoSave); tbody.addEventListener('change', autoSave);
+// lembra usuário quando alterado
+const usuarioInput=document.getElementById('usuario'); if(usuarioInput){ usuarioInput.addEventListener('change', ()=>{ rememberUser(usuarioInput.value); }); }
 
 (async function boot(){
   await fetchEmpresas();
-  // Se não houver empresa selecionada, escolhe a primeira
   const sel=document.getElementById('empresa'); if(sel && !sel.value && EMPRESAS.length){ sel.value = EMPRESAS[0]; }
   await fetchIngredientes(sel?.value||'');
+  // usuários: montar lista e preencher o último usado
+  renderUsersDatalist();
+  try{ const savedUser = localStorage.getItem('AUTH_USER'); if(savedUser && !document.getElementById('usuario').value){ document.getElementById('usuario').value = savedUser; } }catch(_){ }
   if(!loadDraft()){ novaLinha(); novaLinha(); novaLinha(); }
 })();
 
