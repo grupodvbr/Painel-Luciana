@@ -93,7 +93,6 @@
       <div style="grid-column: span 2">
         <label>U.M. (do rendimento)</label>
         <select id="unidadeRend">
-          <!-- 'g' removido do UI -->
           <option value="kg">kg</option>
           <option value="ml">ml</option>
           <option value="l">l</option>
@@ -249,7 +248,7 @@ function toast(msg){
 }
 
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbztNV7-oaerbsoba3dIHezg6tsu3N98hycK96hv5YTYxbTyMsC4MgU3EL5IpngNA_gq/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyDhwp0hhF3wdQcq4krsXqBSCxgkE5qC_-21B0lwYgUnbvkt3w6TnUwhgZPiFDloWt2/exec';
 const DEFAULT_EMPRESAS = ['Mercatto','Padaria'];
 
 /* ===== ESTADO ===== */
@@ -343,7 +342,7 @@ function aplicarIngredienteNaLinha(tr, ing){
   tr.querySelector('.inpCusto').placeholder = `R$ por ${tr.dataset.priceUm || 'U.M.'}`;
   tr.querySelector('.btnPick').style.display = 'none';
   tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
-  const info = tr.querySelector('.ingInfo'); if(info) info.textContent = `${ing.codigo||''}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
+  const info = tr.querySelector('.ingInfo'); if(info) info.textContent = `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
   atualizarTotais(); autoSave();
 }
 
@@ -352,7 +351,7 @@ function lerTabela(){
   const linhas = [...tbody.querySelectorAll('tr')];
   return linhas.map(tr=>{
     const info = tr.querySelector('.ingInfo');
-    if(info){ try{ const ing = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null; info.textContent = ing ? `${ing.codigo||''}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}` : ''; }catch{ info.textContent = ''; } }
+    if(info){ try{ const ing = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null; info.textContent = ing ? `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}` : ''; }catch{ info.textContent = ''; } }
     const qtd = toNumberBR(tr.querySelector('.inpQtd').value);
     const custo = toNumberBR(tr.querySelector('.inpCusto').value);
     const umLinha  = (tr.querySelector('.selUM').value||'').toLowerCase();
@@ -376,7 +375,7 @@ function atualizarTotais(){
 }
 
 /* ===== BACKEND CALLS ===== */
-// --- chamadas ao GAS (faltavam no arquivo; erro "salvarProduto is not defined")
+// salvar produto
 async function salvarProduto(payload){
   const CURRENT_USER = (payload?.usuario || document.getElementById('usuario')?.value || localStorage.getItem('AUTH_USER') || '').trim();
   if(CURRENT_USER){ try{ localStorage.setItem('AUTH_USER', CURRENT_USER); }catch(_){} }
@@ -400,21 +399,48 @@ async function upsertIngrediente(obj){
   try { return JSON.parse(txt); }
   catch { return { ok:false, error:'Resposta não-JSON do GAS: '+txt }; }
 }
+
 async function fetchEmpresas(){
-  try{ const r = await fetch(WEBAPP_URL + '?action=empresas'); const j = await r.json(); if(j.ok && Array.isArray(j.data) && j.data.length){ EMPRESAS = j.data; } else { EMPRESAS = DEFAULT_EMPRESAS.slice(); } }
-  catch(e){ EMPRESAS = DEFAULT_EMPRESAS.slice(); }
+  try{
+    const r = await fetch(WEBAPP_URL + '?action=empresas');
+    const j = await r.json();
+    if(j.ok && Array.isArray(j.data) && j.data.length){
+      EMPRESAS = j.data;
+    } else {
+      EMPRESAS = DEFAULT_EMPRESAS.slice();
+    }
+  }catch(e){
+    EMPRESAS = DEFAULT_EMPRESAS.slice();
+  }
   renderEmpresasSelect();
 }
+
 function renderEmpresasSelect(){
   const sel = document.getElementById('empresa'); if(!sel) return; sel.innerHTML = '';
   const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— selecione —'; sel.appendChild(opt0);
   EMPRESAS.forEach(nome=>{ const o=document.createElement('option'); o.value=nome; o.textContent=nome; sel.appendChild(o); });
 }
+
 async function fetchIngredientes(empresa){
   const url = WEBAPP_URL + '?action=ingredientes&empresa=' + encodeURIComponent(empresa||'') + '&ts=' + Date.now();
-  try{ const r = await fetch(url, { cache: 'no-store' }); const j = await r.json(); if(j.ok){ INGREDIENTES = Array.isArray(j.data) ? j.data : []; renderListaIng(); document.getElementById('infoEmpresa').textContent = empresa ? (`Tabela: ${empresa} • ${INGREDIENTES.length} itens`) : '' ; updateCostsForExistingRows(); } else { toast('Erro ao carregar ingredientes.'); console.warn(j.error); } }
-  catch(e){ toast('Erro ao carregar ingredientes.'); console.error(e); }
+  try{
+    const r = await fetch(url, { cache: 'no-store' });
+    const j = await r.json();
+    if(j.ok){
+      INGREDIENTES = Array.isArray(j.data) ? j.data : [];
+      renderListaIng();
+      document.getElementById('infoEmpresa').textContent = empresa ? (`Tabela: ${empresa} • ${INGREDIENTES.length} itens`) : '' ;
+      updateCostsForExistingRows();
+    } else {
+      toast('Erro ao carregar ingredientes.');
+      console.warn(j.error);
+    }
+  }catch(e){
+    toast('Erro ao carregar ingredientes.');
+    console.error(e);
+  }
 }
+
 function updateCostsForExistingRows(){
   const byCodigo = new Map(); const byNome = new Map();
   INGREDIENTES.forEach(x=>{ if(x.codigo) byCodigo.set(String(x.codigo).trim().toLowerCase(), x); if(x.nome) byNome.set(String(x.nome).trim().toLowerCase(), x); });
@@ -437,15 +463,35 @@ function openPicker(){ picker.style.display='flex'; renderListaIng(); buscaIng.f
 function closePicker(){ picker.style.display='none'; }
 function renderListaIng(){
   const q = (buscaIng.value||'').toLowerCase();
+  // INGREDIENTES já vêm filtrados por empresa do servidor
   const arr = INGREDIENTES.filter(x=> (x.nome||'').toLowerCase().includes(q) || String(x.codigo||'').toLowerCase().includes(q) );
   listaIng.innerHTML = '';
-  if(!arr.length){ const empty=document.createElement('div'); empty.className='row-item'; empty.innerHTML='<em class="muted">Nada encontrado.</em>'; listaIng.appendChild(empty); return; }
+  if(!arr.length){
+    const empty=document.createElement('div'); empty.className='row-item';
+    empty.innerHTML='<em class="muted">Nada encontrado para a empresa selecionada.</em>';
+    listaIng.appendChild(empty); return;
+  }
   arr.forEach((x, idx) => {
     const row = document.createElement('div'); row.className = 'row-item';
-    row.innerHTML = `<div><div><strong>${x.nome||''}</strong> <span class="badge">${(x.um||'').toLowerCase()}</span></div><div class="small muted">${x.codigo||'-'}${x.empresa?(' • '+x.empresa):''} • ${fmtBRL(x.custoUnit||0)} ${(x.obs?('• '+x.obs):'')}</div></div><div class="inline"><button class="btn ghost mini" data-act="sel" data-idx="${idx}">Selecionar</button><button class="btn ghost mini" data-act="edit" data-idx="${idx}">Editar</button></div>`;
+    row.innerHTML = `
+      <div>
+        <div><strong>${x.nome||''}</strong> <span class="badge">${(x.um||'').toLowerCase()}</span></div>
+        <div class="small muted">${x.codigo||'-'}${x.empresa?(' • '+x.empresa):''} • ${fmtBRL(x.custoUnit||0)} ${(x.obs?('• '+x.obs):'')}</div>
+      </div>
+      <div class="inline">
+        <button class="btn ghost mini" data-act="sel" data-idx="${idx}">Selecionar</button>
+        <button class="btn ghost mini" data-act="edit" data-idx="${idx}">Editar</button>
+      </div>`;
     listaIng.appendChild(row);
   });
-  listaIng.querySelectorAll('button').forEach(btn=>{ const i = Number(btn.dataset.idx); const act = btn.dataset.act; btn.addEventListener('click', ()=>{ const ing = INGREDIENTES[i]; if(!ing) return; if(act==='sel'){ selectIng(ing); } if(act==='edit'){ openModal(ing); } }); });
+  listaIng.querySelectorAll('button').forEach(btn=>{
+    const i = Number(btn.dataset.idx); const act = btn.dataset.act;
+    btn.addEventListener('click', ()=>{
+      const ing = INGREDIENTES[i]; if(!ing) return;
+      if(act==='sel'){ selectIng(ing); }
+      if(act==='edit'){ openModal(ing); }
+    });
+  });
 }
 buscaIng.addEventListener('input', renderListaIng);
 document.getElementById('novoIng').addEventListener('click', ()=> openModal(null));
@@ -468,7 +514,11 @@ if(!selIngEmpresa){
   elNome.parentElement.insertBefore(selIngEmpresa, elNome.nextSibling);
   selIngEmpresa = selIngEmpresa.querySelector('select');
 }
-function fillEmpresasSelect(el){ if(!el) return; el.innerHTML=''; const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— selecione —'; el.appendChild(opt0); (EMPRESAS||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; el.appendChild(o); }); }
+function fillEmpresasSelect(el){
+  if(!el) return; el.innerHTML='';
+  const opt0=document.createElement('option'); opt0.value=''; opt0.textContent='— selecione —'; el.appendChild(opt0);
+  (EMPRESAS||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; el.appendChild(o); });
+}
 const btnSalvarIng = document.getElementById('salvarIng');
 function openModal(ing){
   modal.style.display='flex'; modalTitulo.textContent = ing ? 'Editar ingrediente' : 'Novo ingrediente';
@@ -485,9 +535,11 @@ btnSalvarIng.addEventListener('click', async ()=>{
   if(!data.empresa){ alert('Selecione a empresa do ingrediente.'); return; }
   const res = await upsertIngrediente(data);
   if(!res.ok){ alert('Erro ao salvar ingrediente: ' + (res.error||'')); return; }
-  // Atualiza cache local e UI
   await fetchIngredientes(document.getElementById('empresa')?.value||'');
-  if(modalRowRef){ const novo = INGREDIENTES.find(x=> String(x.codigo)===(res.codigo||data.codigo)); if(novo) aplicarIngredienteNaLinha(modalRowRef, novo); }
+  if(modalRowRef){
+    const novo = INGREDIENTES.find(x=> String(x.codigo)===(res.codigo||data.codigo));
+    if(novo) aplicarIngredienteNaLinha(modalRowRef, novo);
+  }
   closeModal(); toast('Ingrediente salvo ✓');
 });
 
@@ -512,7 +564,17 @@ async function handleSalvar(){
   const payload = { empresa: empresaSel, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend, custoReceita: Number(total.toFixed(4)), custoPorGramaOuML: Number(custoPorGMl.toFixed(6)), custoPorKgOuL: Number(custoPorKgL.toFixed(4)), obs: document.getElementById('obs').value.trim(), receita, usuario: CURRENT_USER || '', foto };
   const setStatus = (msg)=>{ const s1=document.getElementById('status'); const s2=document.getElementById('statusDesktop'); if(s1) s1.textContent=msg; if(s2) s2.textContent=msg; };
   setStatus('Enviando...');
-  try{ const r = await salvarProduto(payload); if(r.ok){ setStatus('Salvo com sucesso na aba "Produtos".'); toast('Produto salvo ✓'); $1rememberUser(CURRENT_USER); clearDraft(); } else { setStatus('Erro ao salvar: ' + (r.error||'')); toast('Erro ao salvar'); } }
+  try{
+    const r = await salvarProduto(payload);
+    if(r.ok){
+      setStatus('Salvo com sucesso na aba "Produtos".');
+      toast('Produto salvo ✓');
+      rememberUser(CURRENT_USER);
+      clearDraft();
+    } else {
+      setStatus('Erro ao salvar: ' + (r.error||'')); toast('Erro ao salvar');
+    }
+  }
   catch(err){ setStatus('Falha de rede: ' + err.message); toast('Falha de rede'); }
 }
 
@@ -522,7 +584,23 @@ function getDraft(){
   const receita = lerTabela();
   return { empresa: document.getElementById('empresa').value, codigoSistema: document.getElementById('codigoSistema').value.trim(), numero: document.getElementById('numero').value.trim(), classificacao: document.getElementById('classificacao').value.trim(), item: document.getElementById('item').value.trim(), rendimento: document.getElementById('rendimento').value.trim(), unidadeRend: document.getElementById('unidadeRend').value, obs: document.getElementById('obs').value.trim(), usuario: document.getElementById('usuario').value.trim(), receita: receita.map(r=>({ item:r.item, qtd:r.qtd, um:r.um, custoUnit:r.custoUnit, obs:r.obs })) };
 }
-function applyDraft(d){ if(!d) return; document.getElementById('codigoSistema').value=d.codigoSistema||''; document.getElementById('numero').value=d.numero||''; document.getElementById('classificacao').value=d.classificacao||''; document.getElementById('item').value=d.item||''; document.getElementById('rendimento').value=d.rendimento||''; if(d.unidadeRend) document.getElementById('unidadeRend').value=d.unidadeRend; document.getElementById('obs').value=d.obs||''; document.getElementById('usuario').value=d.usuario||''; const sel=document.getElementById('empresa'); if(sel && d.empresa){ sel.value=d.empresa; } tbody.innerHTML=''; (d.receita||[]).forEach(l=> novaLinha(l)); if(!(d.receita&&d.receita.length)){ novaLinha(); novaLinha(); novaLinha(); } atualizarTotais(); }
+function applyDraft(d){
+  if(!d) return;
+  document.getElementById('codigoSistema').value=d.codigoSistema||'';
+  document.getElementById('numero').value=d.numero||'';
+  document.getElementById('classificacao').value=d.classificacao||'';
+  document.getElementById('item').value=d.item||'';
+  document.getElementById('rendimento').value=d.rendimento||'';
+  if(d.unidadeRend) document.getElementById('unidadeRend').value=d.unidadeRend;
+  document.getElementById('obs').value=d.obs||'';
+  document.getElementById('usuario').value=d.usuario||'';
+  const sel=document.getElementById('empresa');
+  if(sel && d.empresa){ sel.value=d.empresa; fetchIngredientes(d.empresa); }
+  tbody.innerHTML='';
+  (d.receita||[]).forEach(l=> novaLinha(l));
+  if(!(d.receita&&d.receita.length)){ novaLinha(); novaLinha(); novaLinha(); }
+  atualizarTotais();
+}
 function saveDraft(){ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(getDraft())); }catch(_){} }
 function loadDraft(){ try{ const j = localStorage.getItem(DRAFT_KEY); if(j){ applyDraft(JSON.parse(j)); return true; } }catch(_){} return false; }
 function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} }
@@ -530,7 +608,19 @@ function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} }
 /* ===== LIMPAR FORM ===== */
 function limparFormulario(){
   if(!confirm('Limpar todos os campos?')) return;
-  document.getElementById('codigoSistema').value=''; document.getElementById('numero').value=''; document.getElementById('classificacao').value=''; document.getElementById('item').value=''; document.getElementById('rendimento').value=''; document.getElementById('unidadeRend').value='kg'; document.getElementById('obs').value=''; document.getElementById('usuario').value=''; const sel=document.getElementById('empresa'); if(sel) sel.value=''; FOTO=null; const f=document.getElementById('fotoProduto'); if(f) f.value=''; const pw=document.getElementById('fotoPreview'); const pi=document.getElementById('fotoImg'); if(pw){ pw.style.display='none'; } if(pi){ pi.src=''; } tbody.innerHTML=''; novaLinha(); novaLinha(); novaLinha(); atualizarTotais(); clearDraft(); toast('Formulário limpo');
+  document.getElementById('codigoSistema').value='';
+  document.getElementById('numero').value='';
+  document.getElementById('classificacao').value='';
+  document.getElementById('item').value='';
+  document.getElementById('rendimento').value='';
+  document.getElementById('unidadeRend').value='kg';
+  document.getElementById('obs').value='';
+  document.getElementById('usuario').value='';
+  const sel=document.getElementById('empresa'); if(sel) sel.value='';
+  FOTO=null; const f=document.getElementById('fotoProduto'); if(f) f.value='';
+  const pw=document.getElementById('fotoPreview'); const pi=document.getElementById('fotoImg'); if(pw){ pw.style.display='none'; } if(pi){ pi.src=''; }
+  tbody.innerHTML=''; novaLinha(); novaLinha(); novaLinha(); atualizarTotais();
+  clearDraft(); toast('Formulário limpo');
 }
 
 /* ===== BOOT ===== */
@@ -545,10 +635,19 @@ document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ closePicker();
 
 document.getElementById('addLinha').addEventListener('click', ()=> { novaLinha(); saveDraft(); });
 
-// Auto-save (debounced)
+// Auto-save (debounced) e gatilho ao mudar empresa
 let _svT=null; function autoSave(){ clearTimeout(_svT); _svT=setTimeout(saveDraft, 300); }
 ['codigoSistema','numero','classificacao','item','rendimento','unidadeRend','obs','usuario','empresa']
-  .forEach(id=>{ const el=document.getElementById(id); if(el){ el.addEventListener('input', autoSave); el.addEventListener('change', async (e)=>{ if(id==='empresa'){ await fetchIngredientes(e.target.value); } autoSave(); }); }});
+  .forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.addEventListener('input', autoSave);
+      el.addEventListener('change', async (e)=>{
+        if(id==='empresa'){ await fetchIngredientes(e.target.value); }
+        autoSave();
+      });
+    }
+  });
 
 tbody.addEventListener('input', autoSave); tbody.addEventListener('change', autoSave);
 // lembra usuário quando alterado
