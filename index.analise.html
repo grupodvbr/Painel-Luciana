@@ -34,8 +34,17 @@
   /* Modal de Detalhes */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
-  .modal header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
-  .foto{width:120px;height:120px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+
+  /* Cabeçalho do modal em 3 zonas (esq: título | meio: foto+select | dir: fechar) */
+  .modal header{
+    display:grid;
+    grid-template-columns: 1fr auto auto;
+    align-items:center;
+    gap:12px;
+    margin-bottom:8px;
+  }
+  .h-mid{display:flex;align-items:center;gap:10px}
+  .foto{width:56px;height:56px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
 
@@ -43,6 +52,8 @@
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
+    .modal header{grid-template-columns: 1fr; gap:8px}
+    .h-right{display:flex;justify-content:flex-end}
   }
 </style>
 </head>
@@ -91,25 +102,26 @@
   <div class="modal" id="modal">
     <div class="box">
       <header>
-        <div>
+        <!-- esquerda: título/sub -->
+        <div class="h-left">
           <div id="mTitulo" style="font-weight:700;font-size:1.1rem"></div>
           <div id="mSub" class="small muted"></div>
         </div>
-        <div class="inline">
-          <label class="small">Empresas</label>
-          <select id="mCompare"></select>
+        <!-- meio: foto + seletor de empresas -->
+        <div class="h-mid">
+          <img id="mFoto" class="foto" alt="foto" style="display:none"/>
+          <div>
+            <label class="small" for="mCompare">Empresas</label><br/>
+            <select id="mCompare"></select>
+          </div>
+        </div>
+        <!-- direita: fechar -->
+        <div class="h-right">
           <button class="btn ghost" id="mFechar">Fechar</button>
         </div>
       </header>
 
-      <div class="row" style="margin-bottom:12px">
-        <div style="grid-column: span 9">
-          <div class="pill" id="mResumo"></div>
-        </div>
-        <div style="grid-column: span 3" class="right">
-          <img id="mFoto" class="foto" alt="foto" style="display:none"/>
-        </div>
-      </div>
+      <div class="pill" id="mResumo" style="margin-bottom:12px"></div>
 
       <div class="tbl-wrap">
         <table id="tblDet">
@@ -147,7 +159,7 @@ function convertQty(qty, from, to){
 }
 function norm(s){ return String(s||'').trim().toLowerCase(); }
 
-/* Exibir imagens do Drive */
+/* Exibir imagens do Drive/URL */
 function driveImgSrc(uOrId){
   if(!uOrId) return '';
   if(/^[a-zA-Z0-9_-]{20,}$/.test(uOrId)) return `https://drive.google.com/uc?export=view&id=${uOrId}`;
@@ -249,33 +261,34 @@ function abrirModal(prod){
 
   // popula select (padrão = Todas)
   const cmpSel = document.getElementById('mCompare');
-  const opts = ['<option value="__ALL__">(Todas)</option>']
-    .concat(EMPRESAS.map(e=>`<option value="${e}">${e}</option>`));
+  const opts = ['<option value="__ALL__">(Todas)</option>'].concat(EMPRESAS.map(e=>`<option value="${e}">${e}</option>`));
   cmpSel.innerHTML = opts.join('');
   cmpSel.value = '__ALL__';
 
   function render(){
-    // quais empresas mostrar
+    // empresas a mostrar
     const val = cmpSel.value;
     let empresasToShow = val==='__ALL__' ? [...EMPRESAS] : [val];
-    // garante que a empresa base também apareça (se não estiver na lista)
     if(!empresasToShow.includes(baseEmp)) empresasToShow.unshift(baseEmp);
 
+    // título/sub
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
     document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
 
+    // foto ao lado do select
     const foto = document.getElementById('mFoto');
     const src = driveImgSrc(prod.fotoId || prod.fotoUrl);
     if(src){ foto.onerror=()=>{foto.style.display='none'}; foto.src=src; foto.style.display='block'; }
     else { foto.style.display='none'; }
 
+    // tabela dinâmica
     const receita = Array.isArray(prod.receita) ? prod.receita : [];
     const thead = document.getElementById('theadDet');
     const tbody = document.getElementById('tbodyDet');
     thead.innerHTML = '';
     tbody.innerHTML = '';
 
-    // Cabeçalho dinâmico
+    // Cabeçalho
     const thCols = ['Ingrediente','Qtd (receita)','U.M.'].concat(empresasToShow.map(e=>`Preço • ${e}`));
     const trH = document.createElement('tr');
     thCols.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; if(h.startsWith('Preço')) th.className='right'; trH.appendChild(th); });
@@ -286,7 +299,6 @@ function abrirModal(prod){
 
     // Linhas
     receita.forEach(r=>{
-      // para cada empresa, calcula unit/subtotal considerando conversão
       const porEmpresa = empresasToShow.map(emp=>{
         const ing = acharIng(map, emp, r);
         if(!ing) return {emp, unit:null, subtotal:null, umPreco:null, convTxt:'Sem cadastro'};
@@ -303,7 +315,6 @@ function abrirModal(prod){
         return {emp, unit, subtotal: isNaN(sub)?null:sub, umPreco, convTxt};
       });
 
-      // descobre o menor subtotal disponível
       const validos = porEmpresa.filter(x=>x.subtotal!=null);
       const minVal = validos.length ? Math.min(...validos.map(x=>x.subtotal)) : null;
 
@@ -343,9 +354,9 @@ function abrirModal(prod){
       `Rendimento: ${prod.rendimento||''} ${(prod.unidadeRend||'').toUpperCase()} • Itens: ${Array.isArray(prod.receita)?prod.receita.length:0}`;
 
     document.getElementById('mExplain').textContent =
-      'Cálculo: para cada empresa, convertemos a quantidade da receita para a unidade do preço do ingrediente (kg↔g, L↔ml, un 1:1). '+
-      'Fórmula do subtotal por empresa: subtotal = (quantidade convertida) × (preço unitário da empresa). '+
-      'A célula destacada (💚) indica em qual empresa aquele ingrediente está mais barato para a quantidade da receita.';
+      'Cálculo: convertendo a quantidade da receita para a unidade do preço do ingrediente (kg↔g, L↔ml, un 1:1). '+
+      'Subtotal por empresa = (quantidade convertida) × (preço unitário da empresa). '+
+      'A célula destacada (💚) mostra onde esse ingrediente fica mais barato para a quantidade informada.';
   }
 
   render();
