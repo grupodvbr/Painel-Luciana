@@ -31,7 +31,7 @@
   .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
   .best::after{content:" 💚";}
 
-  /* Modal de Detalhes */
+  /* Modal */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 
@@ -46,6 +46,12 @@
   .h-mid{display:flex;align-items:center;gap:10px}
   .foto{width:56px;height:56px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 
+  /* Mesma dimensão para select e botão Fechar */
+  #mCompare, #mFechar{
+    min-height:44px;
+    min-width:180px;
+  }
+
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
 
   /* mobile */
@@ -54,6 +60,7 @@
     .row{grid-template-columns:1fr;gap:10px}
     .modal header{grid-template-columns: 1fr; gap:8px}
     .h-right{display:flex;justify-content:flex-end}
+    #mCompare, #mFechar{width:100%}
   }
 </style>
 </head>
@@ -109,7 +116,7 @@
         </div>
         <!-- meio: foto + seletor de empresas -->
         <div class="h-mid">
-          <img id="mFoto" class="foto" alt="foto" style="display:none"/>
+          <img id="mFoto" class="foto" alt="foto do produto" style="display:none"/>
           <div>
             <label class="small" for="mCompare">Empresas</label><br/>
             <select id="mCompare"></select>
@@ -157,7 +164,10 @@ function convertQty(qty, from, to){
   if(TYPE(from)!==TYPE(to)) return NaN;
   return qty*(FACTOR[from]/FACTOR[to]);
 }
-function norm(s){ return String(s||'').trim().toLowerCase(); }
+function norm(s){ return String(s||'').trim().toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  .replace(/[\.\(\)\[\]$\/\\]/g,' ').replace(/\s+/g,' ');
+}
 
 /* Exibir imagens do Drive/URL */
 function driveImgSrc(uOrId){
@@ -199,7 +209,7 @@ function renderTabela(){
   EMPRESA_ATUAL = emp;
   const arr = (PRODUTOS||[]).filter(r=>{
     const empOk = !emp || norm(r.empresa)===norm(emp);
-    const bOk = !busca || [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> String(v||'').toLowerCase().includes(busca));
+    const bOk = !busca || [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> norm(String(v||'')).includes(busca));
     return empOk && bOk;
   });
   tbodyR.innerHTML = '';
@@ -224,7 +234,7 @@ function renderTabela(){
     const listaFiltrada = (PRODUTOS||[]).filter(r=>{
       const empOk = !EMPRESA_ATUAL || norm(r.empresa)===norm(EMPRESA_ATUAL);
       const bOk = !norm(document.getElementById('fBusca').value) ||
-        [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> String(v||'').toLowerCase().includes(norm(document.getElementById('fBusca').value)));
+        [r.item,r.classificacao,r.codigoSistema,r.numero].some(v=> norm(String(v||'')).includes(norm(document.getElementById('fBusca').value)));
       return empOk && bOk;
     });
     const item = listaFiltrada[idx];
@@ -235,16 +245,19 @@ function renderTabela(){
 
 /* ===== COMPARAÇÃO ===== */
 function indexIngredientesPorEmpresa(){
+  // Mapeia por código E por nome (antes era ou/ou; se havia código, o nome não batia)
   const map = {};
   (ING_TODOS||[]).forEach(x=>{
     const emp = x.empresa||''; if(!map[emp]) map[emp] = {};
-    const key = x.codigo ? `#${String(x.codigo).trim()}` : `n:${norm(x.nome)}`;
-    map[emp][key] = x;
+    const keyCod  = x.codigo ? `#${String(x.codigo).trim()}` : null;
+    const keyNome = x.nome   ? `n:${norm(x.nome)}` : null;
+    if(keyCod)  map[emp][keyCod]  = x;
+    if(keyNome) map[emp][keyNome] = x;
   });
   return map;
 }
 function acharIng(map, empresa, recItem){
-  const keyCod = recItem.codigo ? `#${String(recItem.codigo).trim()}` : null;
+  const keyCod  = recItem.codigo ? `#${String(recItem.codigo).trim()}` : null;
   const keyNome = `n:${norm(recItem.item)}`;
   const m = map[empresa]||{};
   return (keyCod && m[keyCod]) || m[keyNome] || null;
