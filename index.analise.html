@@ -35,22 +35,19 @@
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 
-  /* ======= CABEÇALHO DO MODAL ======= */
+  /* ===== TOPO DO POPUP ===== */
   .modal header{
     position:relative;
     display:grid;
     grid-template-columns: 1fr auto;
     align-items:center;
     gap:12px;
-    padding-top:56px; /* espaço para a barra superior fixa */
+    padding-top:56px; /* espaço para a barra fixa */
     margin-bottom:8px;
   }
-  /* barra fixa no topo do popup (select + fechar) */
   .top-controls{
-    position:absolute;
-    top:0; right:0;
+    position:absolute; top:0; right:0;
     display:flex; align-items:center; gap:8px;
-    background:transparent;
   }
   .ctrl{height:40px; padding:10px 14px; border-radius:12px}
   .ctrl.w{width:220px}
@@ -68,18 +65,8 @@
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
-
-    .modal header{
-      grid-template-columns: 1fr;
-      padding-top:0;        /* a barra deixa de ser absoluta no mobile */
-    }
-    .top-controls{
-      position:static;      /* vira conteúdo normal no fluxo */
-      justify-content:space-between;
-      gap:8px;
-      margin-bottom:8px;
-      flex-wrap:wrap;
-    }
+    .modal header{grid-template-columns: 1fr; padding-top:0}
+    .top-controls{position:static; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap}
     .ctrl.w{width:100%}
   }
 </style>
@@ -296,7 +283,6 @@ function acharIng(map, empresa, recItem){
 const modal = document.getElementById('modal');
 document.getElementById('mFechar').addEventListener('click', ()=> modal.style.display='none');
 
-/* Tenta comparar via API; se não tiver, compara localmente com ING_TODOS */
 async function compararViaAPI(rec){
   try{
     const {qtd, um} = qtyUmFrom(rec);
@@ -319,11 +305,8 @@ function compararLocal(rec){
     const custo = Number(ing.custoUnit||0);
     const subtotal = (conv===null || isNaN(conv)) ? null : conv * custo;
     return {
-      empresa: emp,
-      codigo: ing.codigo||'',
-      nome:   ing.nome||'',
-      umPreco,
-      custoUnit: custo,
+      empresa: emp, codigo: ing.codigo||'', nome: ing.nome||'',
+      umPreco, custoUnit: custo,
       qtdConvertida: (conv===null||isNaN(conv))?null:conv,
       subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6))
     };
@@ -337,7 +320,6 @@ function compararLocal(rec){
 async function abrirModal(prod){
   const baseEmp = prod.empresa || EMPRESA_ATUAL || '';
 
-  // Select de comparação (padrão = Todas)
   const cmpSel = document.getElementById('mCompare');
   const opts = ['<option value="__ALL__">(Todas)</option>'].concat(EMPRESAS.map(e=>`<option value="${e}">${e}</option>`));
   cmpSel.innerHTML = opts.join('');
@@ -357,7 +339,6 @@ async function abrirModal(prod){
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
     document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
 
-    // Foto do produto
     const fotoEl = document.getElementById('mFoto');
     fotoEl.referrerPolicy = 'no-referrer';
     let fotoSrc = driveImgSrc(prod.fotoUrl || prod.fotoId, 800);
