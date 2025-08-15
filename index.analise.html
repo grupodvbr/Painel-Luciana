@@ -8,8 +8,8 @@
   :root{
     --bg:#0f0f10; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --muted:#cfcfcf;
     --brand:#2563eb; --ghost:#374151; --accent:#b75507;
-    /* 👉 ALTERE AQUI O TAMANHO DA FOTO */
-    --foto-size: 160px; /* ex.: 120px, 160px, 220px... */
+    /* 👉 ALTERE AQUI O TAMANHO DA FOTO DO MODAL */
+    --foto-size: 200px; /* ex.: 120px, 160px, 200px, 260px... */
   }
   *{box-sizing:border-box}
   body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px}
@@ -29,22 +29,13 @@
   .small{font-size:.9rem}
   .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#0f172a;border:1px solid #334155;color:#cbd5e1;font-size:.75rem}
   .link{cursor:pointer;color:#93c5fd}
-
-  /* destaque melhor preço */
   .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
   .best::after{content:" 💚";}
 
-  /* Modal */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
-
-  /* Cabeçalho do modal: título | foto+select | fechar (larguras iguais p/ select e botão) */
   .modal header{
-    display:grid;
-    grid-template-columns: 1fr auto auto;
-    align-items:center;
-    gap:12px;
-    margin-bottom:8px
+    display:grid; grid-template-columns: 1fr auto auto; align-items:center; gap:12px; margin-bottom:8px;
   }
   .h-mid{display:flex;align-items:center;gap:12px}
   .ctrl{height:40px; padding:10px 14px; border-radius:12px}
@@ -52,22 +43,17 @@
 
   /* 👉 A foto usa a variável --foto-size acima */
   .foto{
-    width:var(--foto-size);
-    height:var(--foto-size);
-    object-fit:cover;
-    border-radius:12px;
-    border:1px solid var(--line);
+    width:var(--foto-size); height:var(--foto-size);
+    object-fit:cover; border-radius:12px; border:1px solid var(--line);
     box-shadow:0 6px 20px rgba(0,0,0,.35);
   }
 
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
-  .center{display:flex;align-items:center;gap:8px}
 
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
     .modal header{grid-template-columns: 1fr; gap:8px}
-    .h-right{display:flex;justify-content:flex-end}
     .ctrl.w{width:100%}
   }
 </style>
@@ -145,6 +131,7 @@ const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzgAtK2XHB9l4Ddmx9tN
 
 /* ===== ESTADO ===== */
 let PRODUTOS = [];
+let ING_TODOS = [];       // ← todos os ingredientes (todas as empresas)
 let EMPRESAS = [];
 let EMPRESA_ATUAL = '';
 
@@ -152,14 +139,21 @@ let EMPRESA_ATUAL = '';
 const tbodyR = document.getElementById('tbodyReceitas');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const norm = s => String(s||'').trim().toLowerCase();
-
+const FACTOR = { g:1, kg:1000, ml:1, l:1000, un:1 };
+const TYPE   = u => (u==='g'||u==='kg')?'mass' : (u==='ml'||u==='l')?'vol' : 'count';
+function convertQty(qty, from, to){
+  from=(from||'').toLowerCase(); to=(to||'').toLowerCase();
+  if(!FACTOR[from]||!FACTOR[to]) return qty;
+  if(TYPE(from)!==TYPE(to)) return NaN;
+  return qty*(FACTOR[from]/FACTOR[to]);
+}
 function qtyUmFrom(r){
   const qtd = Number(r.qtd ?? r.quantidade ?? r.qtdReceita ?? 0);
   const um  = String(r.um ?? r.unidade ?? r.unidadeReceita ?? '').toLowerCase();
   return {qtd, um};
 }
 
-/* Mais robusto + pede thumbnail do Drive (size configurável) */
+/* Foto do Drive (thumbnail) */
 function driveImgSrc(uOrId, size=800){
   if(!uOrId) return '';
   const s = String(uOrId);
@@ -169,7 +163,7 @@ function driveImgSrc(uOrId, size=800){
   if (m1 && m1[1]) id = m1[1];
   else if (m2 && m2[1]) id = m2[1];
   else if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) id = s;
-  if(!id) return s; // não deu pra extrair ID → usa a URL original
+  if(!id) return s;
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
 }
 
@@ -178,16 +172,25 @@ async function apiGet(path){
   const r = await fetch(WEBAPP_URL+path, {cache:'no-store'});
   return r.json();
 }
+
+/* Carrega empresas = união (Produtos ∪ Ingredientes) */
 async function carregarEmpresas(){
   try{
-    const j = await apiGet('?action=empresas&ts='+Date.now());
-    if(j.ok && Array.isArray(j.data) && j.data.length){ EMPRESAS = j.data.filter(Boolean); return; }
+    const [p,i] = await Promise.all([
+      apiGet('?action=produtos&ts='+Date.now()),
+      apiGet('?action=ingredientes&ts='+Date.now())
+    ]);
+    const set = new Set();
+    if(p.ok) (p.data||[]).forEach(r=> r.empresa && set.add(r.empresa));
+    if(i.ok) (i.data||[]).forEach(r=> r.empresa && set.add(r.empresa));
+    EMPRESAS = [...set];
+    ING_TODOS = i.ok ? (i.data||[]) : [];
+    return;
   }catch(_){}
-  const p = await apiGet('?action=produtos&ts='+Date.now());
-  const set = new Set();
-  if(p.ok) (p.data||[]).forEach(r=> r.empresa && set.add(r.empresa));
-  EMPRESAS = [...set];
+  EMPRESAS = [];
+  ING_TODOS = [];
 }
+
 async function carregarDados(){
   const p = await apiGet('?action=produtos&ts='+Date.now());
   PRODUTOS = p.ok ? (p.data||[]) : [];
@@ -243,9 +246,67 @@ function renderTabela(){
   document.getElementById('metaInfo').textContent = `${arr.length} receitas exibidas${emp?` • Empresa: ${emp}`:''}`;
 }
 
+/* ===== ÍNDICE DE INGREDIENTES (cliente) ===== */
+function buildIngIndex(){
+  const map = {}; // map[empresa][key] = ingrediente
+  (ING_TODOS||[]).forEach(x=>{
+    const emp = x.empresa||''; if(!map[emp]) map[emp]={};
+    const keyCod  = x.codigo ? `#${String(x.codigo).trim()}` : null;
+    const keyNome = `n:${norm(x.nome)}`;
+    if(keyCod) map[emp][keyCod] = x;
+    map[emp][keyNome] = x;
+  });
+  return map;
+}
+function acharIng(map, empresa, recItem){
+  const keyCod = recItem.codigo ? `#${String(recItem.codigo).trim()}` : null;
+  const keyNome = `n:${norm(recItem.item)}`;
+  const m = map[empresa]||{};
+  return (keyCod && m[keyCod]) || m[keyNome] || null;
+}
+
 /* ===== MODAL ===== */
 const modal = document.getElementById('modal');
 document.getElementById('mFechar').addEventListener('click', ()=> modal.style.display='none');
+
+/* Tenta comparar via API; se não tiver, compara localmente com ING_TODOS */
+async function compararViaAPI(rec){
+  try{
+    const {qtd, um} = qtyUmFrom(rec);
+    const codigo = rec.codigo ? `codigo=${encodeURIComponent(rec.codigo)}` : '';
+    const nome   = !rec.codigo ? `nome=${encodeURIComponent(rec.item||'')}` : '';
+    const qs = (codigo || nome) + `&qtd=${encodeURIComponent(qtd||0)}&um=${encodeURIComponent(um)}`;
+    const j = await apiGet(`?action=comparar_ingrediente&${qs}&ts=${Date.now()}`);
+    if(j && j.ok) return j.data;
+  }catch(_){}
+  return null;
+}
+function compararLocal(rec){
+  const {qtd, um} = qtyUmFrom(rec);
+  const idx = buildIngIndex();
+  const empresas = EMPRESAS.map(emp=>{
+    const ing = acharIng(idx, emp, rec);
+    if(!ing) return null;
+    const umPreco = String(ing.um||'').toLowerCase();
+    const conv = (qtd>0 && um) ? convertQty(qtd, um, umPreco) : null;
+    const custo = Number(ing.custoUnit||0);
+    const subtotal = (conv===null || isNaN(conv)) ? null : conv * custo;
+    return {
+      empresa: emp,
+      codigo: ing.codigo||'',
+      nome:   ing.nome||'',
+      umPreco,
+      custoUnit: custo,
+      qtdConvertida: (conv===null||isNaN(conv))?null:conv,
+      subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6))
+    };
+  }).filter(Boolean);
+  // Descobrir a mais barata (não é necessário, mas mantemos compatibilidade)
+  let idxBarato=-1, menor=Infinity;
+  empresas.forEach((x,i)=>{ if(typeof x.custoUnit==='number' && x.custoUnit<menor){ menor=x.custoUnit; idxBarato=i; }});
+  return { chave: rec.codigo ? {tipo:'codigo', valor:rec.codigo} : {tipo:'nome', valor:rec.item||''},
+           qtd, umReceita: um, empresas, idxMaisBarata: idxBarato };
+}
 
 async function abrirModal(prod){
   const baseEmp = prod.empresa || EMPRESA_ATUAL || '';
@@ -256,13 +317,12 @@ async function abrirModal(prod){
   cmpSel.innerHTML = opts.join('');
   cmpSel.value = '__ALL__';
 
-  async function fetchComparativo(rec){ // usa preferencialmente o CÓDIGO
-    const {qtd, um} = qtyUmFrom(rec);
-    const codigo = rec.codigo ? `codigo=${encodeURIComponent(rec.codigo)}` : '';
-    const nome   = !rec.codigo ? `nome=${encodeURIComponent(rec.item||'')}` : '';
-    const qs = (codigo || nome) + `&qtd=${encodeURIComponent(qtd||0)}&um=${encodeURIComponent(um)}`;
-    const j = await apiGet(`?action=comparar_ingrediente&${qs}&ts=${Date.now()}`);
-    return j.ok ? j.data : null;
+  async function fetchComparativo(rec){
+    // 1) tenta API (usa cadastro de ingredientes no GAS)
+    const viaAPI = await compararViaAPI(rec);
+    if(viaAPI) return viaAPI;
+    // 2) fallback: faz a comparação local com ING_TODOS
+    return compararLocal(rec);
   }
 
   async function render(){
@@ -273,27 +333,19 @@ async function abrirModal(prod){
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
     document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
 
-    /* FOTO DO PRODUTO (grande) + fallback
-       - Tamanho do thumbnail pedido ao Drive: altere 800 na chamada abaixo se quiser */
+    // Foto do produto (grande) + fallback
     const fotoEl = document.getElementById('mFoto');
     fotoEl.referrerPolicy = 'no-referrer';
-
     let fotoSrc = driveImgSrc(prod.fotoUrl || prod.fotoId, 800);
     if(!prod.fotoUrl && !prod.fotoId){
-      // fallback: busca outra linha do mesmo produto com foto
       const cand = (PRODUTOS||[]).find(p =>
         (p.codigoSistema && p.codigoSistema===prod.codigoSistema && p.fotoUrl) ||
         (p.item && norm(p.item)===norm(prod.item) && p.fotoUrl)
       );
       if(cand && cand.fotoUrl) fotoSrc = driveImgSrc(cand.fotoUrl, 800);
     }
-    if(fotoSrc){
-      fotoEl.onerror = ()=>{ fotoEl.style.display='none'; };
-      fotoEl.src = fotoSrc;
-      fotoEl.style.display = 'block';
-    }else{
-      fotoEl.style.display = 'none';
-    }
+    if(fotoSrc){ fotoEl.onerror=()=>{fotoEl.style.display='none'}; fotoEl.src=fotoSrc; fotoEl.style.display='block'; }
+    else { fotoEl.style.display='none'; }
 
     const receita = Array.isArray(prod.receita) ? prod.receita : [];
     const thead = document.getElementById('theadDet');
@@ -301,20 +353,14 @@ async function abrirModal(prod){
     thead.innerHTML = '';
     tbody.innerHTML = '';
 
-    // Cabeçalho dinâmico
     const thCols = ['Ingrediente','Qtd (receita)','U.M.'].concat(empresasToShow.map(e=>`Preço • ${e}`));
     const trH = document.createElement('tr');
-    thCols.forEach(h=>{
-      const th=document.createElement('th'); th.textContent=h;
-      if(h.startsWith('Preço')) th.className='right';
-      trH.appendChild(th);
-    });
+    thCols.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; if(h.startsWith('Preço')) th.className='right'; trH.appendChild(th); });
     thead.appendChild(trH);
 
-    // Totais
     const totais = {}; empresasToShow.forEach(e=> totais[e]=0);
 
-    // Comparativos (por item)
+    // Comparativos por item (via API ou local)
     const comps = await Promise.all(receita.map(r=>fetchComparativo(r)));
 
     receita.forEach((r, idx)=>{
@@ -327,7 +373,7 @@ async function abrirModal(prod){
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}${!comp?' <span class="small muted">• sem cadastro nas empresas</span>':''}</td>
+        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}${!comp?' <span class="small muted">• sem cadastro</span>':''}</td>
         <td class="right">${Number(qtd||0)}</td>
         <td>${(um||'').toUpperCase()}</td>
       `;
@@ -337,7 +383,7 @@ async function abrirModal(prod){
         const td = document.createElement('td'); td.className='right';
         if(!x){
           td.textContent='—';
-          td.title = comp ? 'Sem cadastro desta empresa para este ingrediente' : 'Ingrediente não encontrado (verifique código/nome)';
+          td.title = comp ? 'Sem cadastro desta empresa para este ingrediente' : 'Ingrediente não encontrado';
         }else{
           if(x.subtotal!=null) totais[emp]+=x.subtotal;
           td.title = (x.qtdConvertida==null)
@@ -354,7 +400,6 @@ async function abrirModal(prod){
       tbody.appendChild(tr);
     });
 
-    // Totais por empresa
     const totalsWrap = document.getElementById('mTotals');
     totalsWrap.innerHTML = '';
     empresasToShow.forEach(emp=>{
@@ -368,8 +413,7 @@ async function abrirModal(prod){
       `Rendimento: ${prod.rendimento||''} ${(prod.unidadeRend||'').toUpperCase()} • Itens: ${Array.isArray(prod.receita)?prod.receita.length:0}`;
 
     document.getElementById('mExplain').textContent =
-      'Cálculo por empresa: convertemos a quantidade da receita para a unidade do preço do ingrediente (kg↔g, L↔ml, un 1:1). '+
-      'Subtotal = (quantidade convertida) × (preço unitário da empresa). A célula destacada (💚) indica onde este ingrediente fica mais barato para a quantidade informada.';
+      'Os preços vêm do cadastro de ingredientes. A quantidade da receita é convertida para a U.M. do preço (kg↔g, L↔ml, un 1:1). A célula destacada (💚) indica onde o subtotal do ingrediente ficou menor.';
   }
 
   await render();
@@ -381,7 +425,7 @@ async function abrirModal(prod){
 async function boot(){
   const btn = document.getElementById('btnAtualizar');
   btn.disabled = true; btn.textContent = 'Carregando...';
-  await carregarEmpresas();
+  await carregarEmpresas();      // ← já traz union(Produtos, Ingredientes) e ING_TODOS
   await carregarDados();
   renderEmpresasSelect();
   renderTabela();
@@ -390,7 +434,10 @@ async function boot(){
 document.getElementById('btnAtualizar').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnAtualizar');
   btn.disabled = true; btn.textContent = 'Atualizando...';
-  await carregarDados(); renderTabela();
+  await carregarEmpresas();      // mantém empresas atualizadas mesmo sem receitas
+  await carregarDados();
+  renderEmpresasSelect();
+  renderTabela();
   btn.disabled = false; btn.textContent = 'Atualizar';
 });
 document.getElementById('fEmpresa').addEventListener('change', renderTabela);
