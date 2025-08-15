@@ -34,12 +34,27 @@
 
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+
+  /* ======= CABEÇALHO DO MODAL ======= */
   .modal header{
-    display:grid; grid-template-columns: 1fr auto auto; align-items:center; gap:12px; margin-bottom:8px;
+    position:relative;
+    display:grid;
+    grid-template-columns: 1fr auto;
+    align-items:center;
+    gap:12px;
+    padding-top:56px; /* espaço para a barra superior fixa */
+    margin-bottom:8px;
   }
-  .h-mid{display:flex;align-items:center;gap:12px}
+  /* barra fixa no topo do popup (select + fechar) */
+  .top-controls{
+    position:absolute;
+    top:0; right:0;
+    display:flex; align-items:center; gap:8px;
+    background:transparent;
+  }
   .ctrl{height:40px; padding:10px 14px; border-radius:12px}
   .ctrl.w{width:220px}
+  .h-mid{display:flex;align-items:center;gap:12px}
 
   /* 👉 A foto usa a variável --foto-size acima */
   .foto{
@@ -53,7 +68,18 @@
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
-    .modal header{grid-template-columns: 1fr; gap:8px}
+
+    .modal header{
+      grid-template-columns: 1fr;
+      padding-top:0;        /* a barra deixa de ser absoluta no mobile */
+    }
+    .top-controls{
+      position:static;      /* vira conteúdo normal no fluxo */
+      justify-content:space-between;
+      gap:8px;
+      margin-bottom:8px;
+      flex-wrap:wrap;
+    }
     .ctrl.w{width:100%}
   }
 </style>
@@ -95,19 +121,22 @@
   <div class="modal" id="modal">
     <div class="box">
       <header>
+        <!-- barra fixa no topo do popup -->
+        <div class="top-controls">
+          <label class="small muted" for="mCompare">Empresas</label>
+          <select id="mCompare" class="ctrl w"></select>
+          <button class="btn ghost ctrl" id="mFechar">Fechar</button>
+        </div>
+
+        <!-- título + subtítulo -->
         <div>
           <div id="mTitulo" style="font-weight:700;font-size:1.1rem"></div>
           <div id="mSub" class="small muted"></div>
         </div>
+
+        <!-- foto grande -->
         <div class="h-mid">
           <img id="mFoto" class="foto" alt="foto" style="display:none"/>
-          <div>
-            <label class="small" for="mCompare">Empresas</label><br/>
-            <select id="mCompare" class="ctrl w"></select>
-          </div>
-        </div>
-        <div class="h-right">
-          <button class="btn ghost ctrl w" id="mFechar">Fechar</button>
         </div>
       </header>
 
@@ -131,7 +160,7 @@ const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzgAtK2XHB9l4Ddmx9tN
 
 /* ===== ESTADO ===== */
 let PRODUTOS = [];
-let ING_TODOS = [];       // ← todos os ingredientes (todas as empresas)
+let ING_TODOS = [];       // todos os ingredientes (todas as empresas)
 let EMPRESAS = [];
 let EMPRESA_ATUAL = '';
 
@@ -152,8 +181,6 @@ function qtyUmFrom(r){
   const um  = String(r.um ?? r.unidade ?? r.unidadeReceita ?? '').toLowerCase();
   return {qtd, um};
 }
-
-/* Foto do Drive (thumbnail) */
 function driveImgSrc(uOrId, size=800){
   if(!uOrId) return '';
   const s = String(uOrId);
@@ -173,7 +200,7 @@ async function apiGet(path){
   return r.json();
 }
 
-/* Carrega empresas = união (Produtos ∪ Ingredientes) */
+/* Carrega empresas = união (Produtos ∪ Ingredientes) e ingredientes */
 async function carregarEmpresas(){
   try{
     const [p,i] = await Promise.all([
@@ -301,7 +328,6 @@ function compararLocal(rec){
       subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6))
     };
   }).filter(Boolean);
-  // Descobrir a mais barata (não é necessário, mas mantemos compatibilidade)
   let idxBarato=-1, menor=Infinity;
   empresas.forEach((x,i)=>{ if(typeof x.custoUnit==='number' && x.custoUnit<menor){ menor=x.custoUnit; idxBarato=i; }});
   return { chave: rec.codigo ? {tipo:'codigo', valor:rec.codigo} : {tipo:'nome', valor:rec.item||''},
@@ -318,10 +344,8 @@ async function abrirModal(prod){
   cmpSel.value = '__ALL__';
 
   async function fetchComparativo(rec){
-    // 1) tenta API (usa cadastro de ingredientes no GAS)
     const viaAPI = await compararViaAPI(rec);
     if(viaAPI) return viaAPI;
-    // 2) fallback: faz a comparação local com ING_TODOS
     return compararLocal(rec);
   }
 
@@ -333,7 +357,7 @@ async function abrirModal(prod){
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
     document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
 
-    // Foto do produto (grande) + fallback
+    // Foto do produto
     const fotoEl = document.getElementById('mFoto');
     fotoEl.referrerPolicy = 'no-referrer';
     let fotoSrc = driveImgSrc(prod.fotoUrl || prod.fotoId, 800);
@@ -360,7 +384,6 @@ async function abrirModal(prod){
 
     const totais = {}; empresasToShow.forEach(e=> totais[e]=0);
 
-    // Comparativos por item (via API ou local)
     const comps = await Promise.all(receita.map(r=>fetchComparativo(r)));
 
     receita.forEach((r, idx)=>{
@@ -425,7 +448,7 @@ async function abrirModal(prod){
 async function boot(){
   const btn = document.getElementById('btnAtualizar');
   btn.disabled = true; btn.textContent = 'Carregando...';
-  await carregarEmpresas();      // ← já traz union(Produtos, Ingredientes) e ING_TODOS
+  await carregarEmpresas();
   await carregarDados();
   renderEmpresasSelect();
   renderTabela();
@@ -434,7 +457,7 @@ async function boot(){
 document.getElementById('btnAtualizar').addEventListener('click', async ()=>{
   const btn = document.getElementById('btnAtualizar');
   btn.disabled = true; btn.textContent = 'Atualizando...';
-  await carregarEmpresas();      // mantém empresas atualizadas mesmo sem receitas
+  await carregarEmpresas();
   await carregarDados();
   renderEmpresasSelect();
   renderTabela();
