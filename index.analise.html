@@ -239,6 +239,49 @@ function parseBRDateTime(ts){
   return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]), Number(m[4]), Number(m[5]));
 }
 
+/* ==== helpers p/ histórico (pretty JSON + diff resumido) ==== */
+function hEsc(s){ return String(s).replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch])); }
+function hTryParseJSON(s){ if(!s) return null; try{ return JSON.parse(String(s)); }catch(_){ return null; } }
+function hPretty(v){ try{ return JSON.stringify(v, null, 2); }catch(_){ return String(v); } }
+function hRenderVal(v){
+  if(v===undefined) return '<span class="small muted">—</span>';
+  if(v===null)      return '<span class="small muted">null</span>';
+  if(typeof v==='object') return `<pre style="white-space:pre-wrap;font-size:.8rem;margin:0">${hEsc(hPretty(v))}</pre>`;
+  const t = String(v);
+  return t.length>120 ? `<pre style="white-space:pre-wrap;font-size:.8rem;margin:0">${hEsc(t)}</pre>` : `<code>${hEsc(t)}</code>`;
+}
+function hKeysUnion(a,b){ return Array.from(new Set([...Object.keys(a||{}), ...Object.keys(b||{})])).sort(); }
+function hDeepEq(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
+function hResumoAlteracoes(diffObj, antesObj, depoisObj){
+  let map = {};
+  if(diffObj && typeof diffObj==='object' && !Array.isArray(diffObj)){
+    map = diffObj;
+  }else if(antesObj || depoisObj){
+    hKeysUnion(antesObj||{}, depoisObj||{}).forEach(k=>{
+      const av = antesObj?antesObj[k]:undefined;
+      const dv = depoisObj?depoisObj[k]:undefined;
+      if(!hDeepEq(av,dv)) map[k] = {before: av, after: dv};
+    });
+  }
+  const ks = Object.keys(map);
+  const rows = ks.length
+    ? ks.map(k=>`
+        <tr>
+          <td style="white-space:nowrap">${hEsc(k)}</td>
+          <td style="vertical-align:top;background:rgba(239,68,68,.08)">${hRenderVal(map[k].before)}</td>
+          <td style="vertical-align:top;background:rgba(34,197,94,.08)">${hRenderVal(map[k].after)}</td>
+        </tr>`).join('')
+    : `<tr><td colspan="3" class="small muted">Sem alterações detectadas</td></tr>`;
+  return `
+    <div class="small muted">Resumo de alterações</div>
+    <div class="tbl-wrap" style="margin:6px 0">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr><th>Campo</th><th>Antes</th><th>Depois</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
 /* ===== GAS ===== */
 async function apiGet(path){
   const r = await fetch(WEBAPP_URL+path, {cache:'no-store'});
@@ -559,18 +602,31 @@ function aplicarFiltroHistorico(){
   arr.forEach(r=>{
     const d = r.Timestamp || r.timestamp || '';
 
-    const esc = s => String(s).replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
-    const diff   = esc((r['Diff(JSON)']  || r.diff   || r.diffJson   || '').toString());
-    const depois = esc((r['Depois(JSON)']|| r.Depois || r.DepoisJSON || '').toString());
-    const antes  = esc((r['Antes(JSON)'] || r.Antes  || r.AntesJSON  || '').toString());
+    // strings vindas do backend
+    const diffStr   = (r['Diff(JSON)']  || r.diff   || r.diffJson   || '').toString();
+    const depoisStr = (r['Depois(JSON)']|| r.Depois || r.DepoisJSON || '').toString();
+    const antesStr  = (r['Antes(JSON)'] || r.Antes  || r.AntesJSON  || '').toString();
+
+    // tenta transformar em objetos
+    const diffObj   = hTryParseJSON(diffStr);
+    const depoisObj = hTryParseJSON(depoisStr);
+    const antesObj  = hTryParseJSON(antesStr);
+
+    const resumoHTML = hResumoAlteracoes(diffObj, antesObj, depoisObj);
 
     const detalhesHTML = `
       <details>
         <summary>ver</summary>
+        ${resumoHTML}
         <div style="display:grid;gap:8px;margin-top:6px">
-          <div><div class="small muted">Diff(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${diff}</pre></div>
-          <div><div class="small muted">Depois(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${depois}</pre></div>
-          <div><div class="small muted">Antes(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${antes}</pre></div>
+          <div>
+            <div class="small muted">Depois (JSON)</div>
+            <pre style="white-space:pre-wrap;font-size:.8rem">${hEsc(depoisObj ? hPretty(depoisObj) : depoisStr)}</pre>
+          </div>
+          <div>
+            <div class="small muted">Antes (JSON)</div>
+            <pre style="white-space:pre-wrap;font-size:.8rem">${hEsc(antesObj ? hPretty(antesObj) : antesStr)}</pre>
+          </div>
         </div>
       </details>
     `;
