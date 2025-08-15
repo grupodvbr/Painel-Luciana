@@ -47,6 +47,18 @@
   .comp-pill{padding:4px 8px;border-radius:999px;border:1px solid var(--ghost);background:#0e0e11;font-size:.8rem}
   .link{cursor:pointer;color:#93c5fd;text-decoration:underline}
 
+  /* ---- Inline search dentro da linha da composição ---- */
+  .comp-search{position:relative}
+  .comp-search input{width:100%}
+  .comp-suggest{
+    position:absolute; inset:auto 0 0 0; top:calc(100% + 6px);
+    background:#0f0f10; border:1px solid var(--line); border-radius:10px;
+    max-height:240px; overflow:auto; z-index:70; display:none;
+  }
+  .comp-suggest .opt{padding:8px 10px; cursor:pointer; display:flex; justify-content:space-between; gap:10px}
+  .comp-suggest .opt:hover, .comp-suggest .opt.active{background:#0a0a0a}
+  .comp-suggest .meta{font-size:.8rem; color:#cbd5e1; opacity:.9}
+
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
@@ -67,7 +79,7 @@
   .search{display:flex;gap:8px}
   .search input{flex:1}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
-  .modal .box{width:100%;max-width:560px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .modal .box{width:100%;max-width:900px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px} /* ↑ aumentei a largura */
   .foto-preview{display:flex;gap:12px;align-items:center;margin-top:8px}
   .foto-preview img{height:120px;width:auto;border-radius:12px;border:1px solid var(--line)}
 </style>
@@ -103,6 +115,7 @@
         <label>U.M. (do rendimento)</label>
         <select id="unidadeRend">
           <option value="kg">kg</option>
+          <option value="g">g</option>
           <option value="ml">ml</option>
           <option value="l">l</option>
           <option value="un">un</option>
@@ -185,7 +198,7 @@
     </div>
   </div>
 
-  <!-- Picker -->
+  <!-- Picker (continua só para as linhas da RECEITA) -->
   <div class="overlay" id="picker">
     <div class="sheet">
       <div class="handle"></div>
@@ -218,6 +231,7 @@
           <select id="ing_um" required>
             <option value="">— selecione —</option>
             <option value="kg">kg</option>
+            <option value="g">g</option>
             <option value="ml">ml</option>
             <option value="l">l</option>
             <option value="un">un</option>
@@ -233,7 +247,7 @@
         </div>
       </div>
 
-      <!-- >>> NOVO: Tipo + Composição -->
+      <!-- Tipo + Composição -->
       <div id="tipoCompContainer"></div>
 
       <div class="right" style="margin-top:12px">
@@ -267,7 +281,7 @@ const DEFAULT_EMPRESAS = ['Mercatto','Padaria'];
 /* ===== ESTADO ===== */
 let INGREDIENTES = [];
 let EMPRESAS = [];
-let pickerTargetRow = null;   // pode ser <tr> (receita) ou { _compIndex: number }
+let pickerTargetRow = null;   // <tr> da RECEITA
 let modalRowRef = null;
 let FOTO = null;
 
@@ -318,7 +332,7 @@ function compListHTML(ing){
   `;
 }
 
-/* ===== UI DE LINHAS ===== */
+/* ===== UI DE LINHAS (RECEITA) ===== */
 function setIngInfo(tr, ing){
   const info = tr.querySelector('.ingInfo');
   if(!info) return;
@@ -343,6 +357,7 @@ function novaLinha(data={}){
       <select class="selUM" required>
         <option value="">— selecione —</option>
         <option value="kg">kg</option>
+        <option value="g">g</option>
         <option value="ml">ml</option>
         <option value="l">l</option>
         <option value="un">un</option>
@@ -355,7 +370,6 @@ function novaLinha(data={}){
 
   if (data.um) tr.querySelector('.selUM').value = data.um;
 
-  /* rascunho → preenche dataset.ing (inclui compostos) */
   if (data.codigo || data.tipo==='composto') {
     const ingLite = {
       codigo: data.codigo || null,
@@ -514,7 +528,7 @@ async function fetchIngredientes(empresa){
   const url = WEBAPP_URL + '?action=ingredientes&empresa=' + encodeURIComponent(empresa||'') + '&ts=' + Date.now();
   try{
     const r = await fetch(url, { cache: 'no-store' });
-    const j = await r.json();
+       const j = await r.json();
     if(j.ok){
       INGREDIENTES = Array.isArray(j.data) ? j.data : [];
       renderListaIng();
@@ -543,7 +557,7 @@ function updateCostsForExistingRows(){
   });
 }
 
-/* ===== PICKER ===== */
+/* ===== PICKER (RECEITA) ===== */
 const picker = document.getElementById('picker');
 const listaIng = document.getElementById('listaIng');
 const buscaIng = document.getElementById('buscaIng');
@@ -576,34 +590,13 @@ function renderListaIng(){
     const i = Number(btn.dataset.idx); const act = btn.dataset.act;
     btn.addEventListener('click', ()=>{
       const ing = INGREDIENTES[i]; if(!ing) return;
-      if(act==='sel'){ selectIng(ing); }
+      if(act==='sel'){ aplicarIngredienteNaLinha(pickerTargetRow, ing); closePicker(); }
       if(act==='edit'){ openModal(ing); }
     });
   });
 }
 buscaIng.addEventListener('input', renderListaIng);
 document.getElementById('novoIng').addEventListener('click', ()=> openModal(null));
-function selectIng(ing){
-  if(!pickerTargetRow) return;
-  // Seleção para COMPOSIÇÃO
-  if(typeof pickerTargetRow === 'object' && pickerTargetRow._compIndex!=null){
-    const i = pickerTargetRow._compIndex;
-    if(COMP_TEMP[i]){
-      COMP_TEMP[i].codigo = ing.codigo || null;
-      COMP_TEMP[i].nome   = ing.nome || '';
-      // se não informado ainda, usa UM e custo do cadastro
-      if(!COMP_TEMP[i].um) COMP_TEMP[i].um = (ing.um||'').toLowerCase();
-      if(!(COMP_TEMP[i].custoUnit>0)) COMP_TEMP[i].custoUnit = Number(ing.custoUnit||0);
-      renderCompTable();
-      computeCompPreview();
-    }
-    closePicker();
-    return;
-  }
-  // Seleção para linha de receita
-  aplicarIngredienteNaLinha(pickerTargetRow, ing);
-  closePicker();
-}
 
 /* ===== MODAL ingrediente ===== */
 const modal = document.getElementById('modalIng');
@@ -628,12 +621,12 @@ function fillEmpresasSelect(el){
 }
 const btnSalvarIng = document.getElementById('salvarIng');
 
-/* ======= NOVO: Editor de composição no modal ======= */
-let selIngTipo = null;       // select "ing_tipo"
-let compWrap = null;         // container
-let compTbody = null;        // tbody da tabela
-let compResumo = null;       // resumo/estimativa
-let COMP_TEMP = [];          // array temporário da composição
+/* ======= Editor de composição no modal (com busca embutida) ======= */
+let selIngTipo = null;
+let compWrap = null;
+let compTbody = null;
+let compResumo = null;
+let COMP_TEMP = [];
 
 function ensureTipoCompUI(){
   const host = document.getElementById('tipoCompContainer');
@@ -666,7 +659,7 @@ function ensureTipoCompUI(){
     <div class="tbl-wrap">
       <table class="comp-table">
         <thead>
-          <tr><th style="min-width:220px">Item</th><th style="width:110px">Qtd</th><th style="width:90px">U.M.</th><th style="width:150px">Custo Unit. (R$)</th><th style="width:100px">Ações</th></tr>
+          <tr><th style="min-width:280px">Item</th><th style="width:110px">Qtd</th><th style="width:90px">U.M.</th><th style="width:150px">Custo Unit. (R$)</th><th style="width:100px">Ações</th></tr>
         </thead>
         <tbody id="comp_tbody"></tbody>
       </table>
@@ -677,8 +670,7 @@ function ensureTipoCompUI(){
       <button class="btn mini" id="btnUseEstim" title="Aplicar estimativa no campo de custo">Usar estimativa</button>
     </div>
     <div class="small muted" style="margin-top:6px">
-      Dica: deixe o custo unitário em branco para puxar do cadastro do item selecionado. Você pode sobrescrever se quiser.
-      Conversões: kg↔g, L↔ml, un 1:1.
+      Dica: pesquise pelo nome ou código no campo “Item”. Deixe o custo unitário em branco para puxar do cadastro. Conversões: kg↔g, L↔ml, un 1:1.
     </div>
   `;
   host.appendChild(compWrap);
@@ -723,31 +715,85 @@ function delCompRow(idx){
   renderCompTable();
   computeCompPreview();
 }
+
+/* ---- busca inline (por linha) ---- */
+function buildInlineSearch(td, idx){
+  const wrap = document.createElement('div'); wrap.className='comp-search';
+  const input = document.createElement('input');
+  input.placeholder = 'Buscar ingrediente (nome ou código)...';
+  input.value = COMP_TEMP[idx].nome || '';
+  const list = document.createElement('div'); list.className='comp-suggest';
+
+  function results(){
+    const q = input.value.trim().toLowerCase();
+    const arr = INGREDIENTES.filter(x =>
+      !q || (String(x.nome||'').toLowerCase().includes(q) || String(x.codigo||'').toLowerCase().includes(q))
+    ).slice(0, 12);
+
+    list.innerHTML='';
+    arr.forEach((x,i)=>{
+      const el = document.createElement('div'); el.className='opt';
+      const left = document.createElement('div');
+      left.innerHTML = `<strong>${x.nome||''}</strong> <span class="badge">${(x.um||'').toLowerCase()}</span> ${(x.tipo==='composto')?'<span class="badge comp">composto</span>':''}
+        <div class="meta">${x.codigo||'-'} ${x.empresa?('• '+x.empresa):''}</div>`;
+      const right = document.createElement('div'); right.className='meta'; right.textContent = fmtBRL(x.custoUnit||0);
+      el.appendChild(left); el.appendChild(right);
+      el.addEventListener('click', ()=> select(x));
+      list.appendChild(el);
+    });
+    list.style.display = arr.length ? 'block' : 'none';
+  }
+  function hide(){ list.style.display='none'; }
+  function select(x){
+    COMP_TEMP[idx].codigo = x.codigo || null;
+    COMP_TEMP[idx].nome   = x.nome || '';
+    if(!COMP_TEMP[idx].um) COMP_TEMP[idx].um = (x.um||'').toLowerCase();
+    if(!(COMP_TEMP[idx].custoUnit>0)) COMP_TEMP[idx].custoUnit = Number(x.custoUnit||0);
+    input.value = x.nome || '';
+    hide();
+    renderCompTable();
+    computeCompPreview();
+  }
+
+  let nav = -1;
+  input.addEventListener('focus', results);
+  input.addEventListener('input', ()=>{ nav=-1; results(); });
+  input.addEventListener('keydown', (e)=>{
+    const items = [...list.querySelectorAll('.opt')];
+    if(e.key==='ArrowDown'){ e.preventDefault(); if(!items.length) return; nav=(nav+1)%items.length; items.forEach((it,i)=>it.classList.toggle('active', i===nav)); }
+    if(e.key==='ArrowUp'){ e.preventDefault(); if(!items.length) return; nav=(nav-1+items.length)%items.length; items.forEach((it,i)=>it.classList.toggle('active', i===nav)); }
+    if(e.key==='Enter' && nav>-1 && items[nav]){ e.preventDefault(); items[nav].click(); }
+  });
+  document.addEventListener('click', (ev)=>{ if(!wrap.contains(ev.target)) hide(); });
+
+  wrap.appendChild(input); wrap.appendChild(list); td.appendChild(wrap);
+}
+
 function renderCompTable(){
   compTbody.innerHTML = '';
   COMP_TEMP.forEach((r, idx)=>{
     const tr = document.createElement('tr');
 
+    // Item (com busca embutida)
     const tdItem = document.createElement('td');
-    const name = document.createElement('div');
-    const meta = document.createElement('div');
-    name.innerHTML = `<strong>${r.nome||'(selecione)'}</strong> ${r.codigo?`<span class="small muted">• ${r.codigo}</span>`:''}`;
-    meta.className = 'small muted';
-    meta.innerHTML = `<span class="link" data-pick="${idx}">buscar</span>`;
-    tdItem.appendChild(name); tdItem.appendChild(meta);
+    buildInlineSearch(tdItem, idx);
 
+    // Qtd
     const tdQtd = document.createElement('td');
     const iQtd = document.createElement('input'); iQtd.type='number'; iQtd.step='0.0001'; iQtd.value = r.qtd||0; iQtd.style.width='100%';
     tdQtd.appendChild(iQtd);
 
+    // U.M.
     const tdUm = document.createElement('td');
     const sUm = document.createElement('select'); sUm.innerHTML = `<option value="">—</option><option value="kg">kg</option><option value="g">g</option><option value="l">l</option><option value="ml">ml</option><option value="un">un</option>`;
     sUm.value = r.um||''; tdUm.appendChild(sUm);
 
+    // Custo unitário
     const tdC = document.createElement('td');
     const iC = document.createElement('input'); iC.type='number'; iC.step='0.0001'; iC.placeholder='(cadastro)'; iC.value = (r.custoUnit!=null && !isNaN(r.custoUnit)) ? r.custoUnit : '';
     tdC.appendChild(iC);
 
+    // Ações
     const tdA = document.createElement('td');
     const bDel = document.createElement('button'); bDel.className='btn ghost mini'; bDel.textContent='Remover';
     tdA.appendChild(bDel);
@@ -756,10 +802,6 @@ function renderCompTable(){
     compTbody.appendChild(tr);
 
     // events
-    meta.querySelector('[data-pick]').addEventListener('click', ()=>{
-      pickerTargetRow = { _compIndex: idx };
-      openPicker();
-    });
     iQtd.addEventListener('input', ()=>{ COMP_TEMP[idx].qtd = Number(iQtd.value||0); computeCompPreview(); });
     sUm.addEventListener('change', ()=>{ COMP_TEMP[idx].um = (sUm.value||'').toLowerCase(); computeCompPreview(); });
     iC.addEventListener('input', ()=>{ const v = iC.value===''?null:Number(iC.value||0); COMP_TEMP[idx].custoUnit = v; computeCompPreview(); });
@@ -767,6 +809,7 @@ function renderCompTable(){
   });
   compResumo.itens.textContent = COMP_TEMP.length;
 }
+
 function findInCadastro(codigo, nome){
   const byCode = codigo ? INGREDIENTES.find(x => String(x.codigo||'')===String(codigo)) : null;
   if(byCode) return byCode;
@@ -793,15 +836,13 @@ function openModal(ing){
   fillEmpresasSelect(selIngEmpresa); selIngEmpresa.value = ing?.empresa || (document.getElementById('empresa')?.value||'');
   inpCusto.placeholder = selUm.value ? `R$ por ${selUm.value}` : 'R$ por U.M.';
 
-  // monta UI de tipo+composição (uma vez)
   ensureTipoCompUI();
-  // carrega estado
   selIngTipo.value = (ing?.tipo||'simples').toLowerCase();
   COMP_TEMP = Array.isArray(ing?.ingredientes) ? JSON.parse(JSON.stringify(ing.ingredientes)) : [];
   renderCompTable();
   toggleCompUI();
 }
-function closeModal(){ modal.style.display='none'; modalRowRef = null; pickerTargetRow = null; COMP_TEMP = []; }
+function closeModal(){ modal.style.display='none'; modalRowRef = null; COMP_TEMP = []; }
 selUm.addEventListener('change', ()=>{ inpCusto.placeholder = selUm.value ? `R$ por ${selUm.value}` : 'R$ por U.M.'; if(compResumo){ compResumo.umRef.textContent = (selUm.value||'U.M.').toUpperCase(); compResumo.umLbl.textContent = (selUm.value||'U.M.').toUpperCase(); }});
 btnSalvarIng.addEventListener('click', async ()=>{
   const data = {
@@ -823,7 +864,6 @@ btnSalvarIng.addEventListener('click', async ()=>{
   if(!data.nome){ alert('Informe o nome do ingrediente.'); return; }
   if(!data.um){ alert('Selecione a U.M. do ingrediente.'); return; }
   if(!data.empresa){ alert('Selecione a empresa do ingrediente.'); return; }
-  // se composto e custo vazio, sugere estimativa
   if(data.tipo==='composto' && (!inpCusto.value || Number(inpCusto.value)<=0)){
     const est = computeCompPreview();
     if(est>0){ data.custoUnit = Number(est.toFixed(6)); }
