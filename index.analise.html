@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Painel de Análise • Receitas</title>
 <style>
-  :root{ --bg:#0f0f10; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --muted:#cfcfcf; --brand:#2563eb; --ghost:#374151; --accent:#b75507; }
+  :root{
+    --bg:#0f0f10; --panel:#141414; --line:#2a2a2a; --text:#f0f0f0; --muted:#cfcfcf;
+    --brand:#2563eb; --ghost:#374151; --accent:#b75507;
+    /* 👉 ALTERE AQUI O TAMANHO DA FOTO */
+    --foto-size: 160px; /* ex.: 120px, 160px, 220px... */
+  }
   *{box-sizing:border-box}
   body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);margin:0;padding:24px}
   h1{margin:0 0 16px}
@@ -41,10 +46,19 @@
     gap:12px;
     margin-bottom:8px
   }
-  .h-mid{display:flex;align-items:center;gap:10px}
+  .h-mid{display:flex;align-items:center;gap:12px}
   .ctrl{height:40px; padding:10px 14px; border-radius:12px}
   .ctrl.w{width:220px}
-  .foto{width:56px;height:56px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+
+  /* 👉 A foto usa a variável --foto-size acima */
+  .foto{
+    width:var(--foto-size);
+    height:var(--foto-size);
+    object-fit:cover;
+    border-radius:12px;
+    border:1px solid var(--line);
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
+  }
 
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
   .center{display:flex;align-items:center;gap:8px}
@@ -139,17 +153,24 @@ const tbodyR = document.getElementById('tbodyReceitas');
 const fmtBRL = v => (isNaN(v)?0:v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const norm = s => String(s||'').trim().toLowerCase();
 
-function driveImgSrc(uOrId){
-  if(!uOrId) return '';
-  if(/^[a-zA-Z0-9_-]{20,}$/.test(uOrId)) return `https://drive.google.com/uc?export=view&id=${uOrId}`;
-  const m = String(uOrId).match(/\/d\/([^/]+)/) || String(uOrId).match(/[?&]id=([^&]+)/);
-  const id = m && m[1];
-  return id ? `https://drive.google.com/uc?export=view&id=${id}` : uOrId;
-}
 function qtyUmFrom(r){
   const qtd = Number(r.qtd ?? r.quantidade ?? r.qtdReceita ?? 0);
   const um  = String(r.um ?? r.unidade ?? r.unidadeReceita ?? '').toLowerCase();
   return {qtd, um};
+}
+
+/* Mais robusto + pede thumbnail do Drive (size configurável) */
+function driveImgSrc(uOrId, size=800){
+  if(!uOrId) return '';
+  const s = String(uOrId);
+  let id = '';
+  const m1 = s.match(/\/d\/([^/]+)/);
+  const m2 = s.match(/[?&]id=([^&]+)/);
+  if (m1 && m1[1]) id = m1[1];
+  else if (m2 && m2[1]) id = m2[1];
+  else if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) id = s;
+  if(!id) return s; // não deu pra extrair ID → usa a URL original
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
 }
 
 /* ===== GAS ===== */
@@ -252,11 +273,27 @@ async function abrirModal(prod){
     document.getElementById('mTitulo').textContent = `${prod.item||''}`;
     document.getElementById('mSub').textContent = `${prod.classificacao||''} • Empresa base: ${baseEmp} • Nº ${prod.numero||''}`;
 
-    // Foto
-    const foto = document.getElementById('mFoto');
-    const src = driveImgSrc(prod.fotoUrl || prod.fotoId);
-    if(src){ foto.onerror=()=>{foto.style.display='none'}; foto.src=src; foto.style.display='block'; }
-    else { foto.style.display='none'; }
+    /* FOTO DO PRODUTO (grande) + fallback
+       - Tamanho do thumbnail pedido ao Drive: altere 800 na chamada abaixo se quiser */
+    const fotoEl = document.getElementById('mFoto');
+    fotoEl.referrerPolicy = 'no-referrer';
+
+    let fotoSrc = driveImgSrc(prod.fotoUrl || prod.fotoId, 800);
+    if(!prod.fotoUrl && !prod.fotoId){
+      // fallback: busca outra linha do mesmo produto com foto
+      const cand = (PRODUTOS||[]).find(p =>
+        (p.codigoSistema && p.codigoSistema===prod.codigoSistema && p.fotoUrl) ||
+        (p.item && norm(p.item)===norm(prod.item) && p.fotoUrl)
+      );
+      if(cand && cand.fotoUrl) fotoSrc = driveImgSrc(cand.fotoUrl, 800);
+    }
+    if(fotoSrc){
+      fotoEl.onerror = ()=>{ fotoEl.style.display='none'; };
+      fotoEl.src = fotoSrc;
+      fotoEl.style.display = 'block';
+    }else{
+      fotoEl.style.display = 'none';
+    }
 
     const receita = Array.isArray(prod.receita) ? prod.receita : [];
     const thead = document.getElementById('theadDet');
