@@ -32,6 +32,9 @@
   .btn-analise { position: absolute; top: 24px; right: 24px; background: var(--brand); color: #fff; padding: 10px 14px; border-radius: 12px; text-decoration: none; font-weight: 500; box-shadow: 0 4px 20px rgba(0,0,0,.3); transition: background 0.2s; }
   .btn-analise:hover { background: #1e4fbf; }
   .sticky-actions{ display:none; }
+  /* >>> NOVO: selo composto */
+  .badge{font-size:.75rem;border:1px solid var(--ghost);border-radius:999px;padding:2px 6px}
+  .badge.comp{border-color:#7c3aed;color:#e9d5ff;background:#1f1433}
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
@@ -49,7 +52,6 @@
   .list{max-height:55vh;overflow:auto;border:1px solid var(--line);border-radius:12px}
   .row-item{display:flex;gap:8px;align-items:center;justify-content:space-between;padding:10px;border-bottom:1px solid #1f1f1f}
   .row-item:hover{background:#0f0f10}
-  .badge{font-size:.75rem;border:1px solid var(--ghost);border-radius:999px;padding:2px 6px}
   .search{display:flex;gap:8px}
   .search input{flex:1}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60}
@@ -281,7 +283,34 @@ async function fileToBase64(file){ return new Promise((resolve, reject)=>{ const
 inpFoto.addEventListener('change', async (e)=>{ const f = e.target.files && e.target.files[0]; if(!f){ FOTO=null; previewWrap.style.display='none'; return; } if(!/^image\//i.test(f.type)) { toast('Envie uma imagem válida.'); inpFoto.value=''; return; } if(f.size > 5 * 1024 * 1024){ toast('Imagem até 5MB.'); inpFoto.value=''; return; } const base64 = await fileToBase64(f); FOTO = { name: f.name, type: f.type, base64 }; previewImg.src = URL.createObjectURL(f); previewWrap.style.display='flex'; });
 btnRemoverFoto.addEventListener('click', ()=>{ FOTO = null; inpFoto.value=''; previewImg.src=''; previewWrap.style.display='none'; });
 
+/* ===== Compostos: helpers de visualização ===== */
+function compListHTML(ing){
+  if(!ing || ing.tipo!=='composto' || !Array.isArray(ing.ingredientes) || !ing.ingredientes.length) return '';
+  const um = (ing.um||'').toLowerCase() || 'U.M.';
+  const rows = ing.ingredientes.map(p=>{
+    const nome = p.nome || p.item || p.codigo || '(ingrediente)';
+    const qtd  = (p.qtd ?? p.quantidade ?? 0);
+    const ump  = (p.um||'').toLowerCase();
+    const cst  = (typeof p.custoUnit==='number') ? ` • ${fmtBRL(p.custoUnit)}/${(ump||'U.M.').toUpperCase()}` : '';
+    return `<li>${nome}: <strong>${qtd}</strong> ${(ump||'U.M.').toUpperCase()}${cst}</li>`;
+  }).join('');
+  return `
+    <details style="margin-top:4px">
+      <summary class="small">ver composição (por 1 ${um.toUpperCase()})</summary>
+      <ul class="small" style="margin:6px 0 0 14px">${rows}</ul>
+    </details>
+  `;
+}
+
 /* ===== UI DE LINHAS ===== */
+function setIngInfo(tr, ing){
+  const info = tr.querySelector('.ingInfo');
+  if(!info) return;
+  if(!ing){ info.textContent=''; return; }
+  const base = `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
+  const tag = (ing.tipo==='composto') ? ' <span class="badge comp">composto</span>' : '';
+  info.innerHTML = base + tag + compListHTML(ing);
+}
 function novaLinha(data={}){
   const tr = document.createElement('tr');
   tr.innerHTML = `
@@ -310,21 +339,23 @@ function novaLinha(data={}){
 
   if (data.um) tr.querySelector('.selUM').value = data.um;
 
-  // >>> se vier do rascunho com "codigo", preserva no dataset para salvar depois
-  if (data.codigo) {
+  /* rascunho → preenche dataset.ing (inclui compostos) */
+  if (data.codigo || data.tipo==='composto') {
     const ingLite = {
-      codigo: data.codigo,
+      codigo: data.codigo || null,
       nome: data.item || '',
       um: (data.priceUm || data.um || '').toLowerCase(),
       custoUnit: data.custoUnit || 0,
-      empresa: (document.getElementById('empresa')?.value || '')
+      empresa: (document.getElementById('empresa')?.value || ''),
+      /* >>> NOVO: suporte a compostos */
+      tipo: data.tipo || null,
+      ingredientes: Array.isArray(data.ingredientes) ? data.ingredientes : (Array.isArray(data.comp) ? data.comp : undefined)
     };
     tr.dataset.ing = JSON.stringify(ingLite);
-    tr.dataset.priceUm = ingLite.um || '';
-    const info = tr.querySelector('.ingInfo');
-    if(info) info.textContent = `${ingLite.codigo}${ingLite.empresa?(' • '+ingLite.empresa):''} • ${fmtBRL(ingLite.custoUnit||0)}`;
+    tr.dataset.priceUm = (ingLite.um || '').toLowerCase();
     tr.querySelector('.btnPick').style.display = 'none';
     tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
+    setIngInfo(tr, ingLite);
   }
 
   tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); atualizarTotais(); autoSave(); });
@@ -348,12 +379,23 @@ function aplicarIngredienteNaLinha(tr, ing){
   const actualUM = tr.querySelector('.selUM').value || (ing.um||'').toLowerCase();
   tr.querySelector('.selUM').value     = actualUM;
   tr.querySelector('.inpCusto').value  = ing.custoUnit || 0;
-  tr.dataset.ing = JSON.stringify(ing);
+  /* garante que compostos (tipo/ingredientes) vão junto */
+  const toSave = {
+    codigo: ing.codigo || null,
+    nome: ing.nome || '',
+    um: (ing.um||'').toLowerCase(),
+    custoUnit: ing.custoUnit || 0,
+    empresa: ing.empresa || '',
+    obs: ing.obs || '',
+    tipo: ing.tipo || null,
+    ingredientes: Array.isArray(ing.ingredientes) ? ing.ingredientes : undefined
+  };
+  tr.dataset.ing = JSON.stringify(toSave);
   tr.dataset.priceUm = (ing.um||'').toLowerCase();
   tr.querySelector('.inpCusto').placeholder = `R$ por ${tr.dataset.priceUm || 'U.M.'}`;
   tr.querySelector('.btnPick').style.display = 'none';
   tr.querySelector('.btnEditIcon').style.display = 'inline-flex';
-  const info = tr.querySelector('.ingInfo'); if(info) info.textContent = `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
+  setIngInfo(tr, toSave);
   atualizarTotais(); autoSave();
 }
 
@@ -362,14 +404,16 @@ function lerTabela(){
   const linhas = [...tbody.querySelectorAll('tr')];
   return linhas.map(tr=>{
     const info = tr.querySelector('.ingInfo');
-    let codigo = null, priceUmFromDataset = null;
+    let codigo = null, priceUmFromDataset = null, tipo=null, compArr=undefined;
 
     try{
       const ing = tr.dataset.ing ? JSON.parse(tr.dataset.ing) : null;
       if (ing) {
         codigo = ing.codigo || null;
         priceUmFromDataset = (ing.um || '').toLowerCase();
-        if(info) info.textContent = `${(ing.codigo||'')}${ing.empresa?(' • '+ing.empresa):''} • ${fmtBRL(ing.custoUnit||0)} ${(ing.obs?('• '+ing.obs):'')}`;
+        tipo = ing.tipo || null;
+        compArr = Array.isArray(ing.ingredientes) ? ing.ingredientes : undefined;
+        setIngInfo(tr, ing); // (re)render, inclusive se dataset mudou
       } else if(info) {
         info.textContent = '';
       }
@@ -385,7 +429,6 @@ function lerTabela(){
     if(Number.isNaN(qtdNaUMdoPreco)){ if(info) info.textContent = '⚠ U.M. incompatível (qtd vs preço)'; }
 
     return {
-      // >>> agora salvamos também o CÓDIGO
       codigo,
       item: tr.querySelector('.inpItem').value.trim(),
       qtd: isNaN(qtd)?0:qtd,
@@ -393,7 +436,10 @@ function lerTabela(){
       priceUm: umPreco,
       custoUnit: isNaN(custo)?0:custo,
       obs: (tr.querySelector('.inpObs')?.value||'').trim(),
-      subtotal
+      subtotal,
+      /* >>> NOVO: marca se é composto e inclui composição (quando disponível) */
+      tipo: tipo || undefined,
+      ingredientes: compArr || undefined
     };
   }).filter(x=>x.item);
 }
@@ -501,9 +547,10 @@ function renderListaIng(){
   }
   arr.forEach((x, idx) => {
     const row = document.createElement('div'); row.className = 'row-item';
+    const tipoBadge = (x.tipo==='composto') ? ' <span class="badge comp">composto</span>' : '';
     row.innerHTML = `
       <div>
-        <div><strong>${x.nome||''}</strong> <span class="badge">${(x.um||'').toLowerCase()}</span></div>
+        <div><strong>${x.nome||''}</strong> <span class="badge">${(x.um||'').toLowerCase()}</span>${tipoBadge}</div>
         <div class="small muted">${x.codigo||'-'}${x.empresa?(' • '+x.empresa):''} • ${fmtBRL(x.custoUnit||0)} ${(x.obs?('• '+x.obs):'')}</div>
       </div>
       <div class="inline">
@@ -619,8 +666,13 @@ function getDraft(){
     unidadeRend: document.getElementById('unidadeRend').value,
     obs: document.getElementById('obs').value.trim(),
     usuario: document.getElementById('usuario').value.trim(),
-    // >>> agora guardamos também codigo e priceUm
-    receita: receita.map(r=>({ codigo:r.codigo||null, item:r.item, qtd:r.qtd, um:r.um, priceUm:r.priceUm, custoUnit:r.custoUnit, obs:r.obs }))
+    /* >>> mantém compat e passa a guardar tipo/ingredientes se existirem */
+    receita: receita.map(r=>({
+      codigo:r.codigo||null, item:r.item, qtd:r.qtd, um:r.um,
+      priceUm:r.priceUm, custoUnit:r.custoUnit, obs:r.obs,
+      tipo: r.tipo || null,
+      ingredientes: Array.isArray(r.ingredientes)? r.ingredientes : undefined
+    }))
   };
 }
 function applyDraft(d){
