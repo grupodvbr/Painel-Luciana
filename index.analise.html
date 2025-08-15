@@ -37,14 +37,7 @@
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 
-  /* Cabeçalho do modal (título sempre no canto superior esquerdo) */
-  .m-head{
-    display:grid;
-    grid-template-columns: 1fr auto; /* esquerda: título; direita: ações+foto */
-    gap:16px;
-    align-items:start;
-    margin-bottom:8px;
-  }
+  .m-head{display:grid;grid-template-columns: 1fr auto;gap:16px;align-items:start;margin-bottom:8px;}
   .m-title{display:flex;flex-direction:column;gap:4px}
   .m-title .name{font-size:1.4rem;font-weight:700;margin:0;line-height:1.1}
   .m-title .sub{font-size:.95rem;color:var(--muted)}
@@ -118,12 +111,10 @@
   <div class="modal" id="modal">
     <div class="box">
       <div class="m-head">
-        <!-- ESQUERDA: TÍTULO FIXO NO TOPO ESQUERDO -->
         <div class="m-title">
           <div id="mTitulo" class="name"></div>
           <div id="mSub" class="sub"></div>
         </div>
-        <!-- DIREITA: AÇÕES NO TOPO + FOTO ABAIXO -->
         <div class="m-right">
           <div class="m-actions">
             <label class="small" for="mCompare" style="margin-right:6px">Empresas</label>
@@ -203,15 +194,15 @@
 
 <script>
 /* ===== CONFIG ===== */
-const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxGk68YHHcqFS2YYXsVjbtAQmAlR9Ty7nums_Y_TpJ_IMhkcad5tdgCB9bnjMDX1O9x/exec';
+const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycby5-ECS6mvPCBK7cx0L7RPuvgGB5b-E0V5q2QfJKZ9T0VzbfHTnyuesEyJO7eYjHQin/exec'; /* ⬅️ SUBSTITUA */
 
 /* ===== ESTADO ===== */
 let PRODUTOS = [];
-let ING_TODOS = [];       // todos os ingredientes (todas as empresas)
+let ING_TODOS = [];
 let EMPRESAS = [];
 let EMPRESA_ATUAL = '';
-let HIST = [];            // histórico (se o backend expor ?action=historico)
-let HIST_LINK = '';       // fallback: link da planilha
+let HIST = [];
+let HIST_LINK = '';
 
 /* ===== HELPERS ===== */
 const tbodyR = document.getElementById('tbodyReceitas');
@@ -243,7 +234,6 @@ function driveImgSrc(uOrId, size=800){
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
 }
 function parseBRDateTime(ts){
-  // formato: dd/MM/yyyy - HH:mm
   const m = String(ts||'').match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2}):(\d{2})/);
   if(!m) return null;
   return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]), Number(m[4]), Number(m[5]));
@@ -329,7 +319,7 @@ function renderTabela(){
 
 /* ===== ÍNDICE DE INGREDIENTES (cliente) ===== */
 function buildIngIndex(){
-  const map = {}; // map[empresa][key] = ingrediente
+  const map = {};
   (ING_TODOS||[]).forEach(x=>{
     const emp = x.empresa||''; if(!map[emp]) map[emp]={};
     const keyCod  = x.codigo ? `#${String(x.codigo).trim()}` : null;
@@ -397,8 +387,8 @@ async function abrirModal(prod){
 
   async function fetchComparativo(rec){
     const viaAPI = await compararViaAPI(rec);
-    if(viaAPI) return viaAPI;      // usa cadastro de ingredientes no GAS
-    return compararLocal(rec);     // fallback local com ING_TODOS
+    if(viaAPI) return viaAPI;
+    return compararLocal(rec);
   }
 
   async function render(){
@@ -501,25 +491,21 @@ document.getElementById('hFechar').addEventListener('click', ()=> histModal.styl
 document.getElementById('btnHistorico').addEventListener('click', abrirHistorico);
 
 async function abrirHistorico(){
-  // preencher select de empresas do histórico
   const hEmp = document.getElementById('hEmpresa');
   hEmp.innerHTML = '<option value="">(Todas)</option>' + EMPRESAS.map(e=>`<option value="${e}">${e}</option>`).join('');
 
-  // datas padrão: últimos 30 dias
   const dAte = new Date();
   const dDe  = new Date(); dDe.setDate(dAte.getDate()-30);
   const iso = d => d.toISOString().slice(0,10);
   document.getElementById('hDe').value = iso(dDe);
   document.getElementById('hAte').value = iso(dAte);
 
-  // Tenta API JSON; se não houver, cai no fallback (abrir planilha)
   await carregarHistorico();
   aplicarFiltroHistorico();
   histModal.style.display='flex';
 }
 async function carregarHistorico(){
   HIST = []; HIST_LINK = '';
-  // 1) tenta buscar JSON (se você criar ?action=historico no GAS)
   try{
     const j = await apiGet('?action=historico&ts='+Date.now());
     if(j && j.ok && Array.isArray(j.data)){
@@ -528,7 +514,6 @@ async function carregarHistorico(){
       return;
     }
   }catch(_){}
-  // 2) fallback: pega o link da planilha
   try{
     const j2 = await apiGet('?action=historico_link&ts='+Date.now());
     if(j2 && j2.ok && j2.url){
@@ -546,9 +531,7 @@ function aplicarFiltroHistorico(){
   const tbody = document.getElementById('hTbody');
   tbody.innerHTML = '';
   if(!HIST.length){
-    if(HIST_LINK){
-      // sem JSON; só botão de abrir planilha
-    }
+    if(HIST_LINK){ /* só fallback */ }
     return;
   }
   const vDe  = document.getElementById('hDe').value ? new Date(document.getElementById('hDe').value) : null;
@@ -562,22 +545,44 @@ function aplicarFiltroHistorico(){
     if(vDe && d && d < vDe) return false;
     if(vAte && d && d > vAte) return false;
     const empOk = !vEmp || norm(r.Empresa||r.empresa||'')===vEmp || norm(String(r.Chave||'')).startsWith(vEmp+'::');
-    const bOk = !vBus || [r.Chave,r.Usuario,r.Acao,r.Entidade,(r.Depois||r.DepoisJSON||''),(r.Antes||r.AntesJSON||'')]
-      .some(v=> String(v||'').toLowerCase().includes(vBus));
+
+    const bOk = !vBus || [
+      r.Chave, r.Usuario, r.Acao, r.Entidade,
+      (r['Depois(JSON)']||r.Depois||r.DepoisJSON||''),
+      (r['Antes(JSON)'] ||r.Antes ||r.AntesJSON ||''),
+      (r['Diff(JSON)']  ||r.diff   ||r.diffJson   ||'')
+    ].some(v=> String(v||'').toLowerCase().includes(vBus));
+
     return empOk && bOk;
   });
 
   arr.forEach(r=>{
     const d = r.Timestamp || r.timestamp || '';
+
+    const esc = s => String(s).replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+    const diff   = esc((r['Diff(JSON)']  || r.diff   || r.diffJson   || '').toString());
+    const depois = esc((r['Depois(JSON)']|| r.Depois || r.DepoisJSON || '').toString());
+    const antes  = esc((r['Antes(JSON)'] || r.Antes  || r.AntesJSON  || '').toString());
+
+    const detalhesHTML = `
+      <details>
+        <summary>ver</summary>
+        <div style="display:grid;gap:8px;margin-top:6px">
+          <div><div class="small muted">Diff(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${diff}</pre></div>
+          <div><div class="small muted">Depois(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${depois}</pre></div>
+          <div><div class="small muted">Antes(JSON)</div><pre style="white-space:pre-wrap;font-size:.8rem">${antes}</pre></div>
+        </div>
+      </details>
+    `;
+
     const tr = document.createElement('tr');
-    const detalhes = (r['Diff(JSON)']||r.diff||r.diffJson||'').toString();
     tr.innerHTML = `
       <td>${d}</td>
       <td>${r.Usuario||r.usuario||''}</td>
       <td>${r.Entidade||r.entidade||''}</td>
       <td>${r.Acao||r.acao||''}</td>
       <td>${r.Chave||r.chave||''}</td>
-      <td><details><summary>ver</summary><pre style="white-space:pre-wrap;font-size:.8rem">${detalhes.replace(/[<>&]/g,s=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[s]))}</pre></details></td>
+      <td>${detalhesHTML}</td>
     `;
     tbody.appendChild(tr);
   });
