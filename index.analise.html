@@ -23,6 +23,7 @@
   th{background:#000}
   .btn{cursor:pointer;border:0;border-radius:12px;padding:10px 14px;background:var(--brand);color:#fff}
   .btn.ghost{background:transparent;border:1px solid var(--ghost)}
+  .btn.secondary{background:#334155}
   .right{text-align:right}
   .muted{opacity:.85}
   .pill{padding:4px 8px;border-radius:999px;border:1px solid var(--ghost);font-size:.8rem;background:#111}
@@ -32,28 +33,25 @@
   .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
   .best::after{content:" 💚";}
 
+  /* ===== MODAL DETALHE ===== */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
   .modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
 
-  /* ===== TOPO DO POPUP ===== */
-  .modal header{
-    position:relative;
+  /* Cabeçalho do modal (título sempre no canto superior esquerdo) */
+  .m-head{
     display:grid;
-    grid-template-columns: 1fr auto;
-    align-items:center;
-    gap:12px;
-    padding-top:56px; /* espaço para a barra fixa */
+    grid-template-columns: 1fr auto; /* esquerda: título; direita: ações+foto */
+    gap:16px;
+    align-items:start;
     margin-bottom:8px;
   }
-  .top-controls{
-    position:absolute; top:0; right:0;
-    display:flex; align-items:center; gap:8px;
-  }
+  .m-title{display:flex;flex-direction:column;gap:4px}
+  .m-title .name{font-size:1.4rem;font-weight:700;margin:0;line-height:1.1}
+  .m-title .sub{font-size:.95rem;color:var(--muted)}
+  .m-right{display:grid;grid-template-rows:auto auto;gap:10px;align-items:start;justify-items:end}
+  .m-actions{display:flex;gap:8px;align-items:center}
   .ctrl{height:40px; padding:10px 14px; border-radius:12px}
   .ctrl.w{width:220px}
-  .h-mid{display:flex;align-items:center;gap:12px}
-
-  /* 👉 A foto usa a variável --foto-size acima */
   .foto{
     width:var(--foto-size); height:var(--foto-size);
     object-fit:cover; border-radius:12px; border:1px solid var(--line);
@@ -62,12 +60,23 @@
 
   .tbl-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
 
+  /* ===== MODAL HISTÓRICO ===== */
+  .hist-modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:52}
+  .hist-modal .box{width:100%;max-width:1100px;max-height:90vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .h-filtros{display:grid;grid-template-columns:repeat(12,1fr);gap:10px;margin-bottom:10px}
+  .h-filtros > div{grid-column: span 3}
+  .h-filtros .w2{grid-column: span 2}
+  .h-filtros .w4{grid-column: span 4}
+  .h-table{border:1px solid var(--line);border-radius:12px;overflow:auto}
+
   @media (max-width: 768px){
     body{padding:12px}
     .row{grid-template-columns:1fr;gap:10px}
-    .modal header{grid-template-columns: 1fr; padding-top:0}
-    .top-controls{position:static; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap}
+    .m-head{grid-template-columns: 1fr}
+    .m-right{justify-items:start}
     .ctrl.w{width:100%}
+    .h-filtros{grid-template-columns:1fr}
+    .h-filtros > div{grid-column: span 1}
   }
 </style>
 </head>
@@ -84,8 +93,9 @@
         <label>Buscar</label>
         <input id="fBusca" placeholder="Item, classificação, código...">
       </div>
-      <div style="grid-column: span 2;align-self:end" class="right">
-        <button class="btn ghost" id="btnAtualizar">Atualizar</button>
+      <div style="grid-column: span 4;align-self:end" class="right">
+        <button class="btn ghost" id="btnHistorico">Histórico</button>
+        <button class="btn secondary" id="btnAtualizar">Atualizar</button>
       </div>
     </div>
     <div id="metaInfo" class="small muted" style="margin-top:8px"></div>
@@ -104,28 +114,25 @@
     </table>
   </div>
 
-  <!-- Modal -->
+  <!-- Modal Detalhe -->
   <div class="modal" id="modal">
     <div class="box">
-      <header>
-        <!-- barra fixa no topo do popup -->
-        <div class="top-controls">
-          <label class="small muted" for="mCompare">Empresas</label>
-          <select id="mCompare" class="ctrl w"></select>
-          <button class="btn ghost ctrl" id="mFechar">Fechar</button>
+      <div class="m-head">
+        <!-- ESQUERDA: TÍTULO FIXO NO TOPO ESQUERDO -->
+        <div class="m-title">
+          <div id="mTitulo" class="name"></div>
+          <div id="mSub" class="sub"></div>
         </div>
-
-        <!-- título + subtítulo -->
-        <div>
-          <div id="mTitulo" style="font-weight:700;font-size:1.1rem"></div>
-          <div id="mSub" class="small muted"></div>
-        </div>
-
-        <!-- foto grande -->
-        <div class="h-mid">
+        <!-- DIREITA: AÇÕES NO TOPO + FOTO ABAIXO -->
+        <div class="m-right">
+          <div class="m-actions">
+            <label class="small" for="mCompare" style="margin-right:6px">Empresas</label>
+            <select id="mCompare" class="ctrl w"></select>
+            <button class="btn ghost ctrl" id="mFechar">Fechar</button>
+          </div>
           <img id="mFoto" class="foto" alt="foto" style="display:none"/>
         </div>
-      </header>
+      </div>
 
       <div id="mResumo" class="pill" style="margin-bottom:12px"></div>
 
@@ -141,6 +148,59 @@
     </div>
   </div>
 
+  <!-- Modal Histórico -->
+  <div class="hist-modal" id="histModal">
+    <div class="box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-weight:700;font-size:1.1rem">Histórico</div>
+        <div>
+          <button class="btn ghost" id="hFechar">Fechar</button>
+        </div>
+      </div>
+
+      <div class="h-filtros">
+        <div class="w2">
+          <label>De</label>
+          <input type="date" id="hDe">
+        </div>
+        <div class="w2">
+          <label>Até</label>
+          <input type="date" id="hAte">
+        </div>
+        <div class="w4">
+          <label>Empresa</label>
+          <select id="hEmpresa"><option value="">(Todas)</option></select>
+        </div>
+        <div class="w4">
+          <label>Item/Receita (busca)</label>
+          <input id="hBusca" placeholder="Item, nº, código, usuário...">
+        </div>
+      </div>
+
+      <div class="small muted" id="hInfo" style="margin-bottom:6px"></div>
+
+      <div class="h-table">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Usuário</th>
+              <th>Entidade</th>
+              <th>Ação</th>
+              <th>Chave</th>
+              <th>Detalhes</th>
+            </tr>
+          </thead>
+          <tbody id="hTbody"></tbody>
+        </table>
+      </div>
+
+      <div id="hFallback" style="display:none;margin-top:10px">
+        <button class="btn" id="hAbrirPlanilha">Abrir histórico no Google Sheets</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* ===== CONFIG ===== */
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzgAtK2XHB9l4Ddmx9tNAR-xEl194w-wwQE2kNxbVUl4ZqrOytTWJeuyXau35Qhs-e1/exec';
@@ -150,6 +210,8 @@ let PRODUTOS = [];
 let ING_TODOS = [];       // todos os ingredientes (todas as empresas)
 let EMPRESAS = [];
 let EMPRESA_ATUAL = '';
+let HIST = [];            // histórico (se o backend expor ?action=historico)
+let HIST_LINK = '';       // fallback: link da planilha
 
 /* ===== HELPERS ===== */
 const tbodyR = document.getElementById('tbodyReceitas');
@@ -180,6 +242,12 @@ function driveImgSrc(uOrId, size=800){
   if(!id) return s;
   return `https://drive.google.com/thumbnail?id=${id}&sz=w${size}`;
 }
+function parseBRDateTime(ts){
+  // formato: dd/MM/yyyy - HH:mm
+  const m = String(ts||'').match(/(\d{2})\/(\d{2})\/(\d{4})\s*-\s*(\d{2}):(\d{2})/);
+  if(!m) return null;
+  return new Date(Number(m[3]), Number(m[2])-1, Number(m[1]), Number(m[4]), Number(m[5]));
+}
 
 /* ===== GAS ===== */
 async function apiGet(path){
@@ -199,12 +267,11 @@ async function carregarEmpresas(){
     if(i.ok) (i.data||[]).forEach(r=> r.empresa && set.add(r.empresa));
     EMPRESAS = [...set];
     ING_TODOS = i.ok ? (i.data||[]) : [];
-    return;
-  }catch(_){}
-  EMPRESAS = [];
-  ING_TODOS = [];
+  }catch(_){
+    EMPRESAS = [];
+    ING_TODOS = [];
+  }
 }
-
 async function carregarDados(){
   const p = await apiGet('?action=produtos&ts='+Date.now());
   PRODUTOS = p.ok ? (p.data||[]) : [];
@@ -279,7 +346,7 @@ function acharIng(map, empresa, recItem){
   return (keyCod && m[keyCod]) || m[keyNome] || null;
 }
 
-/* ===== MODAL ===== */
+/* ===== MODAL DETALHE ===== */
 const modal = document.getElementById('modal');
 document.getElementById('mFechar').addEventListener('click', ()=> modal.style.display='none');
 
@@ -305,8 +372,11 @@ function compararLocal(rec){
     const custo = Number(ing.custoUnit||0);
     const subtotal = (conv===null || isNaN(conv)) ? null : conv * custo;
     return {
-      empresa: emp, codigo: ing.codigo||'', nome: ing.nome||'',
-      umPreco, custoUnit: custo,
+      empresa: emp,
+      codigo: ing.codigo||'',
+      nome:   ing.nome||'',
+      umPreco,
+      custoUnit: custo,
       qtdConvertida: (conv===null||isNaN(conv))?null:conv,
       subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6))
     };
@@ -327,8 +397,8 @@ async function abrirModal(prod){
 
   async function fetchComparativo(rec){
     const viaAPI = await compararViaAPI(rec);
-    if(viaAPI) return viaAPI;
-    return compararLocal(rec);
+    if(viaAPI) return viaAPI;      // usa cadastro de ingredientes no GAS
+    return compararLocal(rec);     // fallback local com ING_TODOS
   }
 
   async function render(){
@@ -424,6 +494,99 @@ async function abrirModal(prod){
   document.getElementById('mCompare').onchange = render;
   modal.style.display='flex';
 }
+
+/* ===== HISTÓRICO ===== */
+const histModal = document.getElementById('histModal');
+document.getElementById('hFechar').addEventListener('click', ()=> histModal.style.display='none');
+document.getElementById('btnHistorico').addEventListener('click', abrirHistorico);
+
+async function abrirHistorico(){
+  // preencher select de empresas do histórico
+  const hEmp = document.getElementById('hEmpresa');
+  hEmp.innerHTML = '<option value="">(Todas)</option>' + EMPRESAS.map(e=>`<option value="${e}">${e}</option>`).join('');
+
+  // datas padrão: últimos 30 dias
+  const dAte = new Date();
+  const dDe  = new Date(); dDe.setDate(dAte.getDate()-30);
+  const iso = d => d.toISOString().slice(0,10);
+  document.getElementById('hDe').value = iso(dDe);
+  document.getElementById('hAte').value = iso(dAte);
+
+  // Tenta API JSON; se não houver, cai no fallback (abrir planilha)
+  await carregarHistorico();
+  aplicarFiltroHistorico();
+  histModal.style.display='flex';
+}
+async function carregarHistorico(){
+  HIST = []; HIST_LINK = '';
+  // 1) tenta buscar JSON (se você criar ?action=historico no GAS)
+  try{
+    const j = await apiGet('?action=historico&ts='+Date.now());
+    if(j && j.ok && Array.isArray(j.data)){
+      HIST = j.data;
+      document.getElementById('hFallback').style.display='none';
+      return;
+    }
+  }catch(_){}
+  // 2) fallback: pega o link da planilha
+  try{
+    const j2 = await apiGet('?action=historico_link&ts='+Date.now());
+    if(j2 && j2.ok && j2.url){
+      HIST_LINK = j2.url;
+      document.getElementById('hFallback').style.display='block';
+      document.getElementById('hAbrirPlanilha').onclick = ()=> window.open(HIST_LINK,'_blank');
+      document.getElementById('hInfo').textContent = 'Exibindo fallback: abra o histórico completo no Google Sheets.';
+      return;
+    }
+  }catch(_){}
+  document.getElementById('hInfo').textContent = 'Não foi possível carregar o histórico.';
+  document.getElementById('hFallback').style.display='none';
+}
+function aplicarFiltroHistorico(){
+  const tbody = document.getElementById('hTbody');
+  tbody.innerHTML = '';
+  if(!HIST.length){
+    if(HIST_LINK){
+      // sem JSON; só botão de abrir planilha
+    }
+    return;
+  }
+  const vDe  = document.getElementById('hDe').value ? new Date(document.getElementById('hDe').value) : null;
+  const vAte = document.getElementById('hAte').value ? new Date(document.getElementById('hAte').value) : null;
+  if(vAte) vAte.setHours(23,59,59,999);
+  const vEmp = norm(document.getElementById('hEmpresa').value);
+  const vBus = norm(document.getElementById('hBusca').value);
+
+  const arr = HIST.filter(r=>{
+    const d = parseBRDateTime(r.Timestamp||r.timestamp||'');
+    if(vDe && d && d < vDe) return false;
+    if(vAte && d && d > vAte) return false;
+    const empOk = !vEmp || norm(r.Empresa||r.empresa||'')===vEmp || norm(String(r.Chave||'')).startsWith(vEmp+'::');
+    const bOk = !vBus || [r.Chave,r.Usuario,r.Acao,r.Entidade,(r.Depois||r.DepoisJSON||''),(r.Antes||r.AntesJSON||'')]
+      .some(v=> String(v||'').toLowerCase().includes(vBus));
+    return empOk && bOk;
+  });
+
+  arr.forEach(r=>{
+    const d = r.Timestamp || r.timestamp || '';
+    const tr = document.createElement('tr');
+    const detalhes = (r['Diff(JSON)']||r.diff||r.diffJson||'').toString();
+    tr.innerHTML = `
+      <td>${d}</td>
+      <td>${r.Usuario||r.usuario||''}</td>
+      <td>${r.Entidade||r.entidade||''}</td>
+      <td>${r.Acao||r.acao||''}</td>
+      <td>${r.Chave||r.chave||''}</td>
+      <td><details><summary>ver</summary><pre style="white-space:pre-wrap;font-size:.8rem">${detalhes.replace(/[<>&]/g,s=>({ '<':'&lt;','>':'&gt;','&':'&amp;' }[s]))}</pre></details></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('hInfo').textContent = `${arr.length} registros encontrados`;
+}
+['hDe','hAte','hEmpresa','hBusca'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', aplicarFiltroHistorico);
+});
 
 /* ===== BOOT ===== */
 async function boot(){
