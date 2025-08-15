@@ -32,6 +32,8 @@
   .link{cursor:pointer;color:#93c5fd}
   .best{outline:2px solid #16a34a; background:rgba(22,163,74,.12)}
   .best::after{content:" 💚";}
+  /* mini badge composto */
+  .comp-badge{display:inline-block;margin-left:6px;padding:2px 6px;border-radius:999px;border:1px solid #7c3aed;background:#1f1433;color:#e9d5ff;font-size:.72rem}
 
   /* ===== MODAL DETALHE ===== */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
@@ -379,6 +381,33 @@ function acharIng(map, empresa, recItem){
   return (keyCod && m[keyCod]) || m[keyNome] || null;
 }
 
+/* ======= Compostos: cálculo local por empresa ======= */
+function detalharComposto(ing, empresa, idx){
+  if(!(ing && ing.tipo==='composto' && Array.isArray(ing.ingredientes))) return null;
+  const umComp = String(ing.um||'').toLowerCase();
+  const filhos = ing.ingredientes.map(spec=>{
+    const keyCod = spec.codigo ? `#${String(spec.codigo).trim()}` : null;
+    const keyNome = `n:${norm(spec.nome||spec.item||'')}`;
+    const base = (idx[empresa]||{})[keyCod] || (idx[empresa]||{})[keyNome] || null;
+    const umPreco   = String(base?.um||'').toLowerCase();
+    const custoUnit = (typeof spec.custoUnit==='number') ? spec.custoUnit : Number(base?.custoUnit||0);
+    const qtdComp   = Number(spec.qtd || spec.quantidade || 0);
+    const umCompF   = String(spec.um||'').toLowerCase();
+    const qtdConv   = (qtdComp>0 && umCompF && umPreco) ? convertQty(qtdComp, umCompF, umPreco) : null;
+    const valor     = (qtdConv==null || isNaN(qtdConv)) ? null : Number((qtdConv * custoUnit).toFixed(6));
+    return {
+      nome: spec.nome || spec.item || base?.nome || '(ingrediente)',
+      codigo: spec.codigo || base?.codigo || '',
+      qtdComp, umComp: umCompF,
+      umPreco, custoUnit,
+      qtdConvertida: (qtdConv==null || isNaN(qtdConv)) ? null : qtdConv,
+      valor
+    };
+  });
+  const total = filhos.filter(f=> f.valor!=null).reduce((s,f)=> s+f.valor, 0);
+  return { umComp, filhos, custoUnitComp: Number(total.toFixed(6)) };
+}
+
 /* ===== MODAL DETALHE ===== */
 const modal = document.getElementById('modal');
 document.getElementById('mFechar').addEventListener('click', ()=> modal.style.display='none');
@@ -396,10 +425,34 @@ async function compararViaAPI(rec){
 }
 function compararLocal(rec){
   const {qtd, um} = qtyUmFrom(rec);
-  const idx = buildIngIndex();
+  const idxAll = buildIngIndex();
   const empresas = EMPRESAS.map(emp=>{
-    const ing = acharIng(idx, emp, rec);
+    const ing = acharIng(idxAll, emp, rec);
     if(!ing) return null;
+
+    // composto?
+    if(ing.tipo==='composto' && Array.isArray(ing.ingredientes)){
+      const det = detalharComposto(ing, emp, idxAll);
+      const umPreco = String(ing.um||'').toLowerCase();
+      const conv = (qtd>0 && um) ? convertQty(qtd, um, umPreco) : null;
+      const custo = Number(det?.custoUnitComp||0);
+      const subtotal = (conv===null || isNaN(conv)) ? null : conv * custo;
+      return {
+        empresa: emp,
+        codigo: ing.codigo||'',
+        nome:   ing.nome||'',
+        umPreco,
+        custoUnit: custo,
+        qtdConvertida: (conv===null||isNaN(conv))?null:conv,
+        subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6)),
+        tipo: 'composto',
+        comp: det?.filhos||[],
+        compTotal: det?.custoUnitComp||0,
+        compUm: det?.umComp||umPreco
+      };
+    }
+
+    // simples
     const umPreco = String(ing.um||'').toLowerCase();
     const conv = (qtd>0 && um) ? convertQty(qtd, um, umPreco) : null;
     const custo = Number(ing.custoUnit||0);
@@ -414,10 +467,40 @@ function compararLocal(rec){
       subtotal: (subtotal===null||isNaN(subtotal))?null:Number(subtotal.toFixed(6))
     };
   }).filter(Boolean);
+
   let idxBarato=-1, menor=Infinity;
   empresas.forEach((x,i)=>{ if(typeof x.custoUnit==='number' && x.custoUnit<menor){ menor=x.custoUnit; idxBarato=i; }});
-  return { chave: rec.codigo ? {tipo:'codigo', valor:rec.codigo} : {tipo:'nome', valor:rec.item||''},
-           qtd, umReceita: um, empresas, idxMaisBarata: idxBarato };
+  return {
+    chave: rec.codigo ? {tipo:'codigo', valor:rec.codigo} : {tipo:'nome', valor:rec.item||''},
+    qtd, umReceita: um, empresas, idxMaisBarata: idxBarato
+  };
+}
+
+/* render auxiliar: tabela da composição por empresa */
+function renderCompTable(x){
+  if(!(x && x.tipo==='composto' && Array.isArray(x.comp))) return '';
+  const rows = x.comp.map(f=>`
+    <tr>
+      <td>${f.nome||''}${f.codigo?` <span class="small muted">(cod: ${f.codigo})</span>`:''}</td>
+      <td class="right">${Number(f.qtdComp||0)} ${(f.umComp||'').toUpperCase()}</td>
+      <td class="right">${f.qtdConvertida!=null?f.qtdConvertida.toFixed(4):'—'} ${(f.umPreco||'').toUpperCase()}</td>
+      <td class="right">${fmtBRL(f.custoUnit||0)}</td>
+      <td class="right">${f.valor!=null?fmtBRL(f.valor):'—'}</td>
+    </tr>
+  `).join('');
+  return `
+    <div class="tbl-wrap" style="margin-top:6px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr><th>Item</th><th class="right">Qtd (comp.)</th><th class="right">Conv. → preço</th><th class="right">Custo unit.</th><th class="right">Valor</th></tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr><td colspan="4" class="right"><strong>Total (1 ${ (x.compUm||x.umPreco||'U.M.').toUpperCase() })</strong></td><td class="right"><strong>${fmtBRL(x.compTotal||0)}</strong></td></tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
 }
 
 async function abrirModal(prod){
@@ -470,17 +553,20 @@ async function abrirModal(prod){
 
     const comps = await Promise.all(receita.map(r=>fetchComparativo(r)));
 
-    receita.forEach((r, idx)=>{
-      const comp = comps[idx];
+    receita.forEach((r, idxI)=>{
+      const comp = comps[idxI];
       const {qtd, um} = qtyUmFrom(r);
       const porEmpresa = (comp?.empresas||[]).filter(x=> empresasToShow.includes(x.empresa));
 
       const validos = porEmpresa.filter(x=> x.subtotal!=null);
       const minVal = validos.length ? Math.min(...validos.map(x=>x.subtotal)) : null;
 
+      const anyComp = porEmpresa.some(x=> x.tipo==='composto');
+
       const tr = document.createElement('tr');
+      const compMark = anyComp ? ' <span class="comp-badge">composto</span>' : '';
       tr.innerHTML = `
-        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}${!comp?' <span class="small muted">• sem cadastro</span>':''}</td>
+        <td>${r.item||''}${r.codigo?` <span class="small muted">(cod: ${r.codigo})</span>`:''}${!comp?' <span class="small muted">• sem cadastro</span>':''}${compMark}</td>
         <td class="right">${Number(qtd||0)}</td>
         <td>${(um||'').toUpperCase()}</td>
       `;
@@ -503,8 +589,29 @@ async function abrirModal(prod){
         }
         tr.appendChild(td);
       });
-
       tbody.appendChild(tr);
+
+      // bloco de composição (se for composto)
+      if(anyComp){
+        const trComp = document.createElement('tr');
+        const tdComp = document.createElement('td');
+        tdComp.colSpan = thCols.length;
+        const blocks = empresasToShow.map(emp=>{
+          const x = porEmpresa.find(e=> e.empresa===emp);
+          if(!(x && x.tipo==='composto')) return '';
+          return `
+            <div style="margin:10px 0;padding:10px;border:1px solid var(--line);border-radius:12px">
+              <div class="pill" style="display:inline-block;margin-bottom:6px">
+                Empresa: <strong>${emp}</strong> • Total do composto (1 ${(x.compUm||x.umPreco||'U.M.').toUpperCase()}): <strong>${fmtBRL(x.compTotal||0)}</strong>
+              </div>
+              ${renderCompTable(x)}
+            </div>
+          `;
+        }).join('');
+        tdComp.innerHTML = `<div class="small muted">Composição por empresa (valor por 1 U.M. do composto):</div>${blocks}`;
+        trComp.appendChild(tdComp);
+        tbody.appendChild(trComp);
+      }
     });
 
     const totalsWrap = document.getElementById('mTotals');
@@ -520,7 +627,7 @@ async function abrirModal(prod){
       `Rendimento: ${prod.rendimento||''} ${(prod.unidadeRend||'').toUpperCase()} • Itens: ${Array.isArray(prod.receita)?prod.receita.length:0}`;
 
     document.getElementById('mExplain').textContent =
-      'Os preços vêm do cadastro de ingredientes. A quantidade da receita é convertida para a U.M. do preço (kg↔g, L↔ml, un 1:1). A célula destacada (💚) indica onde o subtotal do ingrediente ficou menor.';
+      'Os preços vêm do cadastro de ingredientes. A quantidade da receita é convertida para a U.M. do preço (kg↔g, L↔ml, un 1:1). Para ingredientes compostos, o painel calcula o custo por 1 U.M. somando os itens filhos (com conversões) por empresa. A célula 💚 indica o menor subtotal por ingrediente.';
   }
 
   await render();
@@ -602,12 +709,10 @@ function aplicarFiltroHistorico(){
   arr.forEach(r=>{
     const d = r.Timestamp || r.timestamp || '';
 
-    // strings vindas do backend
     const diffStr   = (r['Diff(JSON)']  || r.diff   || r.diffJson   || '').toString();
     const depoisStr = (r['Depois(JSON)']|| r.Depois || r.DepoisJSON || '').toString();
     const antesStr  = (r['Antes(JSON)'] || r.Antes  || r.AntesJSON  || '').toString();
 
-    // tenta transformar em objetos
     const diffObj   = hTryParseJSON(diffStr);
     const depoisObj = hTryParseJSON(depoisStr);
     const antesObj  = hTryParseJSON(antesStr);
